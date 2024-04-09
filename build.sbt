@@ -150,7 +150,9 @@ lazy val testchipip = (project in file("generators/testchipip"))
 
 lazy val chipyard = (project in file("generators/chipyard"))
   .dependsOn(testchipip, rocketchip, boom, hwacha, sifive_blocks, sifive_cache, iocell,
-    sha3, // On separate line to allow for cleaner tutorial-setup patches
+    sha3,
+    tut_1, // On separate line to allow for cleaner tutorial-setup patches
+    ascon, // On separate line to allow for cleaner tutorial-setup patches
     dsptools, `rocket-dsp-utils`,
     gemmini, icenet, tracegen, cva6, nvdla, sodor, ibex, fft_generator,
     constellation, mempress, barf, shuttle)
@@ -224,6 +226,12 @@ lazy val sodor = (project in file("generators/riscv-sodor"))
   .settings(commonSettings)
 
 lazy val sha3 = (project in file("generators/sha3"))
+  .dependsOn(rocketchip, midasTargetUtils)
+  .settings(libraryDependencies ++= rocketLibDeps.value)
+  .settings(chiselTestSettings)
+  .settings(commonSettings)
+
+lazy val ascon = (project in file("generators/ascon"))
   .dependsOn(rocketchip, midasTargetUtils)
   .settings(libraryDependencies ++= rocketLibDeps.value)
   .settings(chiselTestSettings)
@@ -306,4 +314,11 @@ lazy val fpga_shells = (project in file("./fpga/fpga-shells"))
 
 lazy val fpga_platforms = (project in file("./fpga"))
   .dependsOn(chipyard, fpga_shells)
+  .settings(commonSettings)
+
+
+
+lazy val tut_1 = (project in file("generators/RoCC_Tutorial/simple-example"))
+  .dependsOn(rocketchip, midasTargetUtils)
+  .settings(libraryDependencies ++= rocketLibDeps.value)
   .settings(commonSettings)

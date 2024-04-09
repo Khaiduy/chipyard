@@ -57,7 +57,7 @@ class TutorialMMIOConfig extends Config(
 // Tutorial Phase 3: Integrate a SHA3 RoCC accelerator
 class TutorialSha3Config extends Config(
   // Uncomment this line once you added SHA3 to the build.sbt, and cloned the SHA3 repo
-  // new sha3.WithSha3Accel ++
+  new sha3.WithSha3Accel ++
 
   // For this demonstration we assume the base system is a single-core Rocket, for fast elaboration
   new freechips.rocketchip.subsystem.WithNBigCores(1) ++

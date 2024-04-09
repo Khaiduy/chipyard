@@ -17,19 +17,21 @@ SIZE = $(PREFIX)size
 #################################
 
 # SoC Settings
-ARCH = rv64imafdc
-ABI = lp64d
+#ARCH = rv64imafdc
+ARCH = rv32imafc_zicsr
+#ABI = lp64d
+ABI = ilp32f
 ARCHFLAGS = -march=$(ARCH) -mabi=$(ABI)
 
 CFLAGS  = -std=gnu99 -O2 -fno-common -fno-builtin-printf -Wall
 CFLAGS += $(ARCHFLAGS)
-LDFLAGS = -static
+LDFLAGS = -static -march=$(ARCH) -mabi=$(ABI)
 
 include libgloss.mk
 
 PROGRAMS = pwm blkdev accum charcount nic-loopback big-blkdev pingd \
            streaming-passthrough streaming-fir nvdla spiflashread spiflashwrite fft gcd \
-           hello mt-hello
+           hello mt-hello genkat ascon
 
 
 .DEFAULT_GOAL := default
@@ -69,3 +71,14 @@ default: $(addsuffix .riscv, $(PROGRAMS)) spiflash.img
 
 .PHONY: dumps
 dumps: $(addsuffix .dump, $(PROGRAMS))
+
+#################################
+# Additional target for genkat
+#################################
+
+genkat: ascon-c/crypto_aead/ascon128v12/opt32/*.c ascon-c/crypto_aead/ascon128v12/opt32/*.h ascon-c/tests/genkat_aead.c
+	$(GCC) $(CFLAGS) -L libgloss -Iascon-c/crypto_aead/ascon128v12/opt32 $^ -o $@
+
+ascon.riscv: $(wildcard test_ascon/*.c) $(wildcard test_ascon/*.h)
+	$(GCC) $(CFLAGS) -L libgloss -I test_ascon $^ -o $@ -Wl,-melf32lriscv
+
