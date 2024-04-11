@@ -2,30 +2,33 @@ package ascon
 
 import chisel3._
 import chisel3.util.{Decoupled, Queue}
-import freechips.rocketchip.rocket.{HellaCacheIO, HellaCacheReq}
-import freechips.rocketchip.tile.RoCCIO
-import org.chipsalliance.cde.config.Parameters
+import freechips.rocketchip.rocket.{HellaCacheIO, HellaCacheReq, TLBPTWIO}
+
+import freechips.rocketchip.tile._
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.diplomacy._
 
 
 
-class RoCCDecouplerIO (xLen: Int = 32)(implicit p: Parameters) extends Bundle{
+class RoCCDecouplerIO (nPTWPorts: Int = 1, xLen: Int = 32)(implicit p: Parameters) extends Bundle{
   // Control signals
   val clock = Input(Clock())
   val reset = Input(UInt(1.W))
 
   // RoCC interface
-  val rocc_io = new RoCCIO(0, 0)
+  val rocc_io = new RoCCIO(nPTWPorts, 0)
 
   val mem_cache = Flipped(Decoupled(new HellaCacheReq()))
+
+  val ptw = Flipped(new TLBPTWIO)
+
 
   // Decoupler-Controller interface
   val controller_io = Flipped(new ControllerDecouplerIO(xLen))
 }
 
-class RoCCDecoupler (xLen: Int = 32)(implicit p: Parameters) extends Module {
-  val io = IO(new RoCCDecouplerIO())
-
-
+class RoCCDecoupler (nPTWPorts: Int = 1, xLen: Int = 32)(implicit p: Parameters) extends Module {
+  val io = IO(new RoCCDecouplerIO(nPTWPorts, xLen))
 
   // Process cmd
   io.controller_io.rocc_req_rs1     := io.rocc_io.cmd.bits.rs1
@@ -62,7 +65,7 @@ class RoCCDecoupler (xLen: Int = 32)(implicit p: Parameters) extends Module {
   io.rocc_io.mem.s1_data.data       := 0.U
   io.rocc_io.mem.s1_data.mask       := 0.U
   io.rocc_io.mem.s2_kill            := false.B
-  io.rocc_io.mem.keep_clock_enabled := true.B
+  io.rocc_io.mem.keep_clock_enabled := false.B
 
   io.controller_io.dmem_resp_val := io.rocc_io.mem.resp.valid
   io.controller_io.dmem_resp_data := io.rocc_io.mem.resp.bits.data
@@ -70,6 +73,7 @@ class RoCCDecoupler (xLen: Int = 32)(implicit p: Parameters) extends Module {
   io.controller_io.dmem_req_rdy := io.rocc_io.mem.req.ready
 
   io.rocc_io.mem.req <> io.mem_cache
+  io.rocc_io.ptw.head <> io.ptw
 
   // Set the other flags
   io.rocc_io.busy       := io.controller_io.busy

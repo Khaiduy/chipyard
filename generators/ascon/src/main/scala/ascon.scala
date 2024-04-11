@@ -32,7 +32,7 @@ class asconp (xLen: Int = 32)(implicit p: Parameters) extends BlackBox with HasB
 }
 
 class MyAsconAccel (opcodes: OpcodeSet)(implicit p: Parameters) extends LazyRoCC (
-  opcodes   = opcodes) {
+  opcodes   = opcodes, nPTWPorts = if (p(AsconTLB).isDefined) 1 else 0) {
   override lazy val module = new MyAsconAccelImp(this)
   val dmemOpt = p(AsconTLB).map { _ =>
     val dmem = LazyModule(new DmemModule)
@@ -48,10 +48,11 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
   chisel3.dontTouch(io)
 
   override val xLen = 32
+
   val cacheParams = tileParams.dcache.get
 
   // Instantiate the rocc modules
-  val myroccDecoupler  = Module(new RoCCDecoupler(xLen))
+  val myroccDecoupler  = Module(new RoCCDecoupler(1, xLen))
 
   val myroccController = Module(new RoCCController(xLen))
 
@@ -85,8 +86,21 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
   outer.dmemOpt match {
     case Some(m) => {
       val dmem = m.module
-      dmem_ctrl(dmem.io.req)
+      //dmem_ctrl(dmem.io.req)
+      dmem.io.req.valid := myroccController.io.decoupler_io.dmem_req_val
+      myroccController.io.decoupler_io.dmem_req_rdy := dmem.io.req.ready
+      dmem.io.req.bits.tag := myroccController.io.decoupler_io.dmem_req_tag
+      dmem.io.req.bits.addr := myroccController.io.decoupler_io.dmem_req_addr
+      dmem.io.req.bits.cmd := myroccController.io.decoupler_io.dmem_req_cmd
+      dmem.io.req.bits.size := myroccController.io.decoupler_io.dmem_req_size
+      dmem.io.req.bits.data := dmem_data
+      dmem.io.req.bits.signed := Bool(false)
+      dmem.io.req.bits.dprv := status.dprv
+      dmem.io.req.bits.dv := status.dv
+      dmem.io.req.bits.phys := Bool(false)
+
       dmem.io.mem <> myroccDecoupler.io.mem_cache
+      myroccDecoupler.io.ptw <> dmem.io.ptw
       //println("Mem was declared")
       dmem.io.status := status
       dmem.io.sfence := myroccController.io.decoupler_io.sfence
@@ -94,7 +108,7 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
     case None => dmem_ctrl(myroccDecoupler.io.rocc_io.mem.req)
   }
 
-  dmem_data := 0.U
+  dmem_data := myroccController.io.decoupler_io.buffer_out
 
   if (p(AsconBlackBox)) {
     val myroccBlackBox   = Module(new asconp(xLen))

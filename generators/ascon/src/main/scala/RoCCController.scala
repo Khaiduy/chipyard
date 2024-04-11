@@ -16,6 +16,11 @@ import freechips.rocketchip.tile.{CoreParams, HasCoreParameters}
 import freechips.rocketchip.rocket.constants.MemoryOpConstants
 import org.chipsalliance.cde.config._
 
+object State extends ChiselEnum {
+  val s_idle, s_read, s_write, s_wait = Value
+}
+import State._
+
 class ControllerDecouplerIO(xLen: Int = 32)(override implicit val p: Parameters) extends Bundle
   with HasCoreParameters
   with MemoryOpConstants {
@@ -47,6 +52,7 @@ class ControllerDecouplerIO(xLen: Int = 32)(override implicit val p: Parameters)
 
   val sfence            = Output(Bool())
 
+  val buffer_out    = Output(UInt(xLen.W))
 }
 
 class RoCCControllerIO (xLen: Int = 32)(implicit p: Parameters) extends Bundle {
@@ -55,7 +61,7 @@ class RoCCControllerIO (xLen: Int = 32)(implicit p: Parameters) extends Bundle {
   val reset = Input(UInt(1.W))
 
   // Controller-Decoupler interface
-  val decoupler_io = new ControllerDecouplerIO(xLen)(p)
+  val decoupler_io = new ControllerDecouplerIO(xLen)
 
   // Black box interface
   val bb_io = Flipped(new myPermutation_bb_IO(xLen))
@@ -66,10 +72,6 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   with MemoryOpConstants {
 
   val io = IO(new RoCCControllerIO(xLen)(p))
-
-
-
-
   //val req_rd          = Reg(chiselTypeOf(io.decoupler_io.rocc_resp_rd))
 
   val funct           = io.decoupler_io.rocc_req_funct
@@ -110,24 +112,28 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   //***************************************************************************************
   //***************************************************************************************
 
-
+  val buffer = Reg(init=Vec.fill(10) { 0.U(32.W) })
+  val buffer_count = Reg(init = UInt(0,5))
+  val buffer_valid = RegInit(false.B)
   val rindex = RegInit(1.U(5.W))
   val busy = RegInit(false.B)
+
+  val stateReg = RegInit(s_idle)
 
   //val m_idle :: m_read :: m_wait :: m_pad :: m_absorb :: Nil = Enum(UInt(), 5)
   //val mem_s = Reg(init=m_idle)
 
-  val r_idle :: Nil = Enum(UInt(), 1)
-  val rocc_s = Reg(init=r_idle)
+  //val r_idle :: Nil = Enum(UInt(), 1)
+  //val rocc_s = Reg(init=r_idle)
 
   //hasher state
-  val s_idle :: m_idle :: m_read :: s_write :: Nil = Enum(UInt(), 4)
-
-  val state = Reg(init=s_idle)
+  //val s_idle :: m_idle :: m_read :: s_write :: Nil = Enum(UInt(), 4)
+  //val state = Reg(init=s_idle)
 
   val in_addr = RegInit(0.U(32.W))
   val out_addr= RegInit(0.U(32.W))
   val data_len  = RegInit(0.U(32.W))
+
   val read  = RegInit(0.U(32.W))
   val mindex  = RegInit(0.U(5.W))
   val windex  = Reg(init = UInt(0,log2Up(32+1)))
@@ -136,118 +142,129 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   val dmem_resp_tag_reg = RegNext(io.decoupler_io.dmem_resp_tag)
   val writes_done  = Reg( init=Vec.fill(10) { Bool(false) })
 
-
+  io.decoupler_io.buffer_out := buffer(mindex)
   io.decoupler_io.busy := busy
 
   io.decoupler_io.sfence            := false.B
   io.decoupler_io.dmem_req_tag      := rindex
   io.decoupler_io.dmem_req_addr     := Bits(0, 32)
   io.decoupler_io.dmem_req_cmd      := M_XRD
-  io.decoupler_io.dmem_req_size     := log2Ceil(8).U
+  io.decoupler_io.dmem_req_size     := log2Ceil(4).U
   io.decoupler_io.dmem_req_val      := false.B
 
-  io.decoupler_io.dmem_req_size:= log2Ceil(8).U
 
-  switch(rocc_s) {
-    is(r_idle) {
-      //io.decoupler_io.rocc_req_ready := !busy
-      when(io.decoupler_io.rocc_req_valid && !busy){
-        when(cmd_write && funct == 6.U){
-          //io.decoupler_io.rocc_req_ready := true.B
-          in_addr  := rs1
-          out_addr := rs2
-          println("Input Addr: "+in_addr+", Output Addr: "+out_addr)
-          io.decoupler_io.busy := true.B
-        }.elsewhen(cmd_write && funct == 7.U) {
-          busy := true.B
-          //io.decoupler_io.rocc_req_ready := true.B
-          io.decoupler_io.busy := true.B
-          data_len := rs1
-        }
-      }
+  when(valid && !busy){
+    when(cmd_write && funct === 6.U ){
+      io.decoupler_io.rocc_req_ready := true.B
+      in_addr  := rs1
+      out_addr := rs2
+      //println("Input Addr: "+in_addr+", Output Addr: "+out_addr)
+      io.decoupler_io.busy := true.B
+    }.elsewhen(cmd_write && funct === 7.U) {
+      busy := true.B
+      io.decoupler_io.rocc_req_ready := true.B
+      io.decoupler_io.busy := true.B
+      data_len := rs1
     }
   }
 
 
-  switch(state) {
-    is(m_idle){
+  switch(stateReg) {
+    is(s_idle){
       //we can start filling the buffer if we aren't writing and if we got a new message
       //or the hashing started
       //and there is more to read
       //and the buffer has been absorbed
-      val canRead = busy &&  (read < data_len || (read === data_len && data_len === UInt(0)) )
+      val canRead = busy && (read < data_len || (read === data_len && data_len === UInt(0)) && buffer_count === UInt(0))
       when(canRead){
-        //buffer := Vec.fill(round_size_words){Bits(0,W)}
-        //buffer_count := UInt(0)
         mindex := UInt(0)
-        state := m_read
+        stateReg := s_read
       }.otherwise{
-        state := m_idle
+        stateReg := s_idle
       }
     }
-    is(m_read) {
+    is(s_read) {
       //dmem signals
       //only read if we aren't writing
-      when(state =/= s_write) {
+      //when(stateReg =/= s_write) {
         io.decoupler_io.dmem_req_val := read < data_len && mindex < 10.U
         io.decoupler_io.dmem_req_addr := in_addr
         io.decoupler_io.dmem_req_tag := mindex
         io.decoupler_io.dmem_req_cmd := M_XRD
-        io.decoupler_io.dmem_req_size := log2Ceil(8).U
+        io.decoupler_io.dmem_req_size := log2Ceil(4).U
 
         when(io.decoupler_io.dmem_req_rdy && io.decoupler_io.dmem_req_val) {
           mindex := mindex + UInt(1)
           in_addr := in_addr + UInt(4)
-          read := read + UInt(4) //read 8 bytes
-          state := m_read
+          read := read + UInt(4) //read 4 bytes
+          //stateReg := s_wait
         }
-      }
+      //}
       //TODO: don't like special casing this
       when(data_len === UInt(0)) {
         read := UInt(1)
       }
 
-    }
-
-    is(s_write){
-      //we are writing
-      //request
-      io.decoupler_io.dmem_req_val := windex < 10.U
-      io.decoupler_io.dmem_req_addr := out_addr
-      io.decoupler_io.dmem_req_tag := 0.B
-      io.decoupler_io.dmem_req_cmd := M_XWR
-
-      when(io.decoupler_io.dmem_req_rdy){
-        windex := windex + UInt(1)
-        out_addr := out_addr + UInt(8)
-      }
-
-      //response
-      when(dmem_resp_val_reg){
-        //there is a response from memory
-        when(dmem_resp_tag_reg(4,0) >= 10) {
-          //this is a response to a write
-          writes_done(dmem_resp_tag_reg(4,0)-UInt(10)) := Bool(true)
+      //next state
+      when(mindex < UInt(10 -1)){
+        //TODO: in pad check buffer_count ( or move on to next thread?)
+        when(data_len > read){
+          //not sure if this case will be used but this means we haven't
+          //sent all the requests yet (maybe back pressure causes this)
+          stateReg := s_read
+        }.otherwise{
+          //its ok we didn't send them all because the message wasn't big enough
+          buffer_valid := Bool(false)
+          //mem_s := m_pad
+          //pindex := words_filled
         }
-      }
-      when(writes_done.reduce(_&&_)){
-        //all the writes have been responded to
-        //this is essentially reset time
-        busy := Bool(false)
-
-        writes_done := Vec.fill(10){Bool(false)}
-        windex := UInt(10)
-        rindex := UInt(10+1)
-        in_addr := UInt(0)
-        out_addr := UInt(0)
-        data_len := UInt(0)
-        read := UInt(0)
-        state := s_idle
       }.otherwise{
-        state := s_write
+        when(mindex < UInt(10) && !(io.decoupler_io.dmem_req_rdy && io.decoupler_io.dmem_req_val)){
+          //we are still waiting to send the last request
+          stateReg := s_read
+        }.otherwise{
+          //we have reached the end of this chunk
+          mindex := mindex + UInt(1)
+          in_addr := in_addr + UInt(4)
+          read := read + UInt(4)//read 8 bytes
+          //we sent all the requests
+          when((data_len < (read+UInt(4) ))){
+            //but the buffer still isn't full
+            //buffer_valid := Bool(false)
+            //mem_s := m_pad
+            //pindex := words_filled
+          }.otherwise{
+            //we have more to read eventually
+            stateReg := s_idle
+          }
+        }
       }
     }
   }
+
+  when(io.decoupler_io.dmem_resp_val) {
+    when(io.decoupler_io.dmem_resp_tag(4,0) < 9.U){
+      //This is read response
+      buffer(io.decoupler_io.dmem_resp_tag(4,0)) := io.decoupler_io.dmem_resp_data
+      buffer_count := buffer_count + UInt(1)
+    }.otherwise{
+      busy := false.B
+    }
+  }
+  when(buffer_count >= (mindex) && (mindex >= UInt(10))){// ||
+    //read(i) > msg_len(i))){
+    when(read > data_len){
+      //padding needed
+    }.otherwise{
+      //next cycle the buffer will be valid
+      //buffer_valid := Bool(true)
+    }
+  }
+  io.bb_io.x0_in := Cat(buffer(0), buffer(1))
+  io.bb_io.x1_in := Cat(buffer(2), buffer(3))
+  io.bb_io.x2_in := Cat(buffer(4), buffer(5))
+  io.bb_io.x3_in := Cat(buffer(6), buffer(7))
+  io.bb_io.x4_in := Cat(buffer(8), buffer(9))
 
   //Finish dealing with mem
   //***************************************************************************************
@@ -264,11 +281,11 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
 
   io.decoupler_io.rocc_req_ready := outputReg
 
-  io.bb_io.x0_in := x0_in_reg
-  io.bb_io.x1_in := x1_in_reg
-  io.bb_io.x2_in := x2_in_reg
-  io.bb_io.x3_in := x3_in_reg
-  io.bb_io.x4_in := x4_in_reg
+  //io.bb_io.x0_in := x0_in_reg
+  //io.bb_io.x1_in := x1_in_reg
+  //io.bb_io.x2_in := x2_in_reg
+  //io.bb_io.x3_in := x3_in_reg
+  //io.bb_io.x4_in := x4_in_reg
   io.bb_io.rcon  := rcon_in_reg
 
   when((io.decoupler_io.rocc_req_cmd === ISA.WRITE) && doWrite_0 && valid) {
