@@ -68,7 +68,7 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
   val status = RegEnable(io.cmd.bits.status, io.cmd.fire())
 
 
-  val dmem_data = Wire(UInt(coreDataBits.W))
+  //val dmem_data = Wire(UInt(coreDataBits.W))
   def dmem_ctrl(req: DecoupledIO[HellaCacheReq]) {
     req.valid := myroccController.io.decoupler_io.dmem_req_val
     myroccController.io.decoupler_io.dmem_req_rdy := req.ready
@@ -76,7 +76,7 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
     req.bits.addr := myroccController.io.decoupler_io.dmem_req_addr
     req.bits.cmd := myroccController.io.decoupler_io.dmem_req_cmd
     req.bits.size := myroccController.io.decoupler_io.dmem_req_size
-    req.bits.data := dmem_data
+    req.bits.data := myroccController.io.decoupler_io.dmem_req_data
     req.bits.signed := Bool(false)
     req.bits.dprv := status.dprv
     req.bits.dv := status.dv
@@ -93,7 +93,7 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
       dmem.io.req.bits.addr := myroccController.io.decoupler_io.dmem_req_addr
       dmem.io.req.bits.cmd := myroccController.io.decoupler_io.dmem_req_cmd
       dmem.io.req.bits.size := myroccController.io.decoupler_io.dmem_req_size
-      dmem.io.req.bits.data := dmem_data
+      dmem.io.req.bits.data := myroccController.io.decoupler_io.dmem_req_data
       dmem.io.req.bits.signed := Bool(false)
       dmem.io.req.bits.dprv := status.dprv
       dmem.io.req.bits.dv := status.dv
@@ -108,7 +108,7 @@ class MyAsconAccelImp(outer: MyAsconAccel)(implicit p: Parameters) extends LazyR
     case None => dmem_ctrl(myroccDecoupler.io.rocc_io.mem.req)
   }
 
-  dmem_data := myroccController.io.decoupler_io.buffer_out
+  //dmem_data := myroccController.io.decoupler_io.buffer_out
 
   if (p(AsconBlackBox)) {
     val myroccBlackBox   = Module(new asconp(xLen))

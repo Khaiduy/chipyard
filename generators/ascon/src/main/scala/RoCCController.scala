@@ -17,7 +17,7 @@ import freechips.rocketchip.rocket.constants.MemoryOpConstants
 import org.chipsalliance.cde.config._
 
 object State extends ChiselEnum {
-  val s_idle, s_read, s_write, s_wait = Value
+  val s_idle, s_read, s_write, s_wait, s_wait_2 = Value
 }
 import State._
 
@@ -45,6 +45,7 @@ class ControllerDecouplerIO(xLen: Int = 32)(override implicit val p: Parameters)
   val dmem_req_addr     = Output(UInt(coreMaxAddrBits.W))
   val dmem_req_cmd      = Output(UInt(5.W))
   val dmem_req_size     = Output(UInt(log2Ceil(coreDataBytes + 1).W))
+  val dmem_req_data     = Output(UInt(xLen.W))
 
   val dmem_resp_val     = Input(Bool())
   val dmem_resp_tag     = Input(UInt(7.W))
@@ -151,7 +152,20 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   io.decoupler_io.dmem_req_cmd      := M_XRD
   io.decoupler_io.dmem_req_size     := log2Ceil(4).U
   io.decoupler_io.dmem_req_val      := false.B
+  io.decoupler_io.dmem_req_data      := Bits(0, 32)
 
+  val bbOutVec = VecInit(Seq(
+    io.bb_io.x0_out(63, 32),
+    io.bb_io.x0_out(31, 0),
+    io.bb_io.x1_out(63, 32),
+    io.bb_io.x1_out(31, 0),
+    io.bb_io.x2_out(63, 32),
+    io.bb_io.x2_out(31, 0),
+    io.bb_io.x3_out(63, 32),
+    io.bb_io.x3_out(31, 0),
+    io.bb_io.x4_out(63, 32),
+    io.bb_io.x4_out(31, 0)
+  ))
 
   when(valid && !busy){
     when(cmd_write && funct === 6.U ){
@@ -164,7 +178,8 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
       busy := true.B
       io.decoupler_io.rocc_req_ready := true.B
       io.decoupler_io.busy := true.B
-      data_len := rs1
+      data_len := 0x28.U
+      rcon_in_reg := rs1
     }
   }
 
@@ -235,20 +250,72 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
             //pindex := words_filled
           }.otherwise{
             //we have more to read eventually
-            stateReg := s_idle
+            stateReg := s_wait
           }
         }
+      }
+    }
+    is(s_wait){
+      stateReg := s_wait_2
+    }
+    is(s_wait_2){
+      stateReg := s_write
+    }
+    is(s_write){
+      //we are writing
+      //request
+
+      io.decoupler_io.dmem_req_val := windex < 10.U
+      io.decoupler_io.dmem_req_addr := out_addr
+      io.decoupler_io.dmem_req_tag := 10.U + windex
+      io.decoupler_io.dmem_req_cmd := M_XWR
+      io.decoupler_io.dmem_req_data := bbOutVec(windex)
+
+      when(io.decoupler_io.dmem_req_rdy && io.decoupler_io.dmem_req_val){
+        windex := windex + UInt(1)
+        out_addr := out_addr + UInt(4)
+        io.decoupler_io.dmem_req_data := bbOutVec(windex)
+      }
+
+      //response
+      when(dmem_resp_val_reg){
+        //there is a response from memory
+        when(dmem_resp_tag_reg(4,0) >= 10.U) {
+          //this is a response to a write
+          writes_done(dmem_resp_tag_reg(4,0)-10.U) := Bool(true)
+        }
+      }
+
+      when(writes_done.reduce(_&&_)){
+        //all the writes have been responded to
+        //this is essentially reset time
+        busy := false.B
+
+        writes_done := Vec.fill(10){Bool(false)}
+        windex := UInt(0)
+        rindex := UInt(0)
+        buffer_count := UInt(0)
+        in_addr := UInt(0)
+        out_addr := UInt(0)
+        data_len := UInt(0)
+        //hashed := UInt(0)
+        read := UInt(0)
+        buffer_valid := Bool(false)
+        //io.init := Bool(true)
+        stateReg := s_idle
+      }.otherwise{
+        stateReg := s_write
       }
     }
   }
 
   when(io.decoupler_io.dmem_resp_val) {
-    when(io.decoupler_io.dmem_resp_tag(4,0) < 9.U){
+    when(io.decoupler_io.dmem_resp_tag(4,0) < 10.U){
       //This is read response
       buffer(io.decoupler_io.dmem_resp_tag(4,0)) := io.decoupler_io.dmem_resp_data
       buffer_count := buffer_count + UInt(1)
     }.otherwise{
-      busy := false.B
+      //busy := false.B
     }
   }
   when(buffer_count >= (mindex) && (mindex >= UInt(10))){// ||
