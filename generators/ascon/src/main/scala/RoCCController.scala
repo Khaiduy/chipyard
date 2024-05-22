@@ -162,16 +162,20 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
         when(cmd_write && funct === 6.U) {
           io.decoupler_io.rocc_req_ready := true.B
           in_addr := rs1
-          out_addr := rs2
+          out_addr := rs1
+          data_len := 0x28.U
+          rcon_in_reg := rs2
+          io.decoupler_io.rocc_req_ready := true.B
+          busy := true.B
           //println("Input Addr: "+in_addr+", Output Addr: "+out_addr)
           io.decoupler_io.busy := true.B
-        }.elsewhen(cmd_write && funct === 7.U) {
+        }/*.elsewhen(cmd_write && funct === 7.U) {
           busy := true.B
           io.decoupler_io.rocc_req_ready := true.B
           io.decoupler_io.busy := true.B
           data_len := 0x28.U
           rcon_in_reg := rs1
-        }
+        }*/
       }
     }
   }
