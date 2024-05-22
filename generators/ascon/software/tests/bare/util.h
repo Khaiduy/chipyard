@@ -28,7 +28,7 @@
 
 #if HOST_DEBUG
 #include <stdio.h>
-//static void setStats(int enable) {}
+static void setStats(int enable) {}
 #else
 extern void setStats(int enable);
 #endif

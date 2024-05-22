@@ -1,115 +1,54 @@
-OUTPUT_ARCH ("riscv")
-ENTRY (_start)
+/*======================================================================*/
+/* Proxy kernel linker script                                           */
+/*======================================================================*/
+/* This is the linker script used when building the proxy kernel. */
+
+/*----------------------------------------------------------------------*/
+/* Setup                                                                */
+/*----------------------------------------------------------------------*/
+
+/* The OUTPUT_ARCH command specifies the machine architecture where the
+   argument is one of the names used in the BFD library. More
+   specifically one of the entires in bfd/cpu-mips.c */
+
+OUTPUT_ARCH( "riscv" )
+ENTRY(_start)
+
+/*----------------------------------------------------------------------*/
+/* Sections                                                             */
+/*----------------------------------------------------------------------*/
 
 SECTIONS
 {
-    . = 0x80000000;
 
-    /* Keep under a power of 2 to reserve space for TCB */
-    PROVIDE (__stack_size_min = 24K);
+  /* text: test code section */
+  . = 0x80000000;
+  .text.init : { *(.text.init) }
 
-    .text : {
-        *(.text.init)
-        *(.text.unlikely .text.unlikely.*)
-        *(.text.startup .text.startup.*)
-        *(.text .text.*)
-        *(.gnu.linkonce.t.*)
-    }
-    PROVIDE (_etext = .);
+  .tohost ALIGN(0x1000) : { *(.tohost) }
 
-    /* Static Thread Local Storage template */
-    .tdata : {
-        PROVIDE_HIDDEN (__tdata_start = .);
-        *(.tdata .tdata.*)
-        *(.gnu.linkonce.td.*)
-        PROVIDE_HIDDEN (__tdata_end = .);
-    }
-    PROVIDE (__tdata_size = SIZEOF (.tdata));
+  .text : { *(.text) }
 
-    .tbss (NOLOAD) : {
-        PROVIDE_HIDDEN (__tbss_start = .);
-        PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start));
-        *(.tbss .tbss.*)
-        *(.gnu.linkonce.tb.*)
-        *(.tcommon)
-        PROVIDE_HIDDEN (__tbss_end = .);
-    }
-    PROVIDE (__tbss_size = SIZEOF (.tbss));
+  . = 0x80004000;
+  .rodata : { *(.rodata) }
 
-    .rodata : {
-        *(.rodata .rodata.*)
-        *(.gnu.linkonce.r.*)
-    }
+  /* data segment */
+  .data ALIGN(0x40) : { *(.data) }
 
-    .preinit_array : {
-        PROVIDE_HIDDEN (__preinit_array_start = .);
-        KEEP (*(.preinit_array))
-        PROVIDE_HIDDEN (__preinit_array_end = .);
-    }
+  .sdata : {
+    __global_pointer$ = . + 0x800;
+    *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata*)
+    *(.sdata .sdata.* .gnu.linkonce.s.*)
+  }
 
-    .init_array : {
-        PROVIDE_HIDDEN (__init_array_start = .);
-        KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
-        KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
-        PROVIDE_HIDDEN (__init_array_end = .);
-    }
+  /* bss segment */
+  .sbss : {
+    *(.sbss .sbss.* .gnu.linkonce.sb.*)
+    *(.scommon)
+  }
+  .bss ALIGN(0x40) : { *(.bss) }
 
-    .fini_array : {
-        PROVIDE_HIDDEN (__fini_array_start = .);
-        KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
-        KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
-        PROVIDE_HIDDEN (__fini_array_end = .);
-    }
-
-    .ctors : {
-        KEEP (*crtbegin.o(.ctors))
-        KEEP (*crtbegin?.o(.ctors))
-        KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o) .ctors))
-        KEEP (*(SORT(.ctors.*)))
-        KEEP (*(.ctors))
-    }
-
-    .dtors : {
-        KEEP (*crtbegin.o(.dtors))
-        KEEP (*crtbegin?.o(.dtors))
-        KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o) .dtors))
-        KEEP (*(SORT(.dtors.*)))
-        KEEP (*(.dtors))
-    }
-
-    /* Host-Target Interface */
-    .htif ALIGN(0x40) : {
-        *(.htif)
-    }
-
-    .data : ALIGN (8) {
-        *(.data)
-        *(.gnu.linkonce.d.*)
-    }
-
-    .sdata : {
-        PROVIDE (__global_pointer$ = . + 0x800);
-        *(.sdata .sdata.*)
-        *(.gnu.linkonce.s.*)
-        *(.srodata.cst16)
-        *(.srodata.cst8)
-        *(.srodata.cst4)
-        *(.srodata.cst2)
-        *(.srodata .srodata.*)
-    }
-
-    PROVIDE (_edata = .);
-
-    .bss : ALIGN (8) {
-        PROVIDE_HIDDEN (__bss_start = .);
-        *(.sbss .sbss.*)
-        *(.gnu.linkonce.sb.*)
-        *(.bss .bss.*)
-        *(.gnu.linkonce.b.*)
-        *(COMMON)
-        PROVIDE_HIDDEN (__bss_end = .);
-    }
-   /* thread-local data segment */
+  /* thread-local data segment */
   .tdata :
   {
     _tls_data = .;
@@ -117,23 +56,14 @@ SECTIONS
     *(.tdata)
     *(.tdata.end)
   }
-  
-    . = ALIGN (8);
-    PROVIDE (_end = .);
+  .tbss :
+  {
+    *(.tbss)
+    *(.tbss.end)
+  }
 
-    /* Reserve heap space */
-    PROVIDE(__heap_size = 128K);
-    . += __heap_size;
-    . = ALIGN (4K);
-    PROVIDE (__heap_end = .);
 
-    /* Place Thread Control Block (TCB) at bottom of hart stack */
-    PROVIDE (__tcb_size = __tbss_end - __tdata_start);
-    PROVIDE (__stack_align = MAX (ALIGNOF (.tdata), 0x10));
-    PROVIDE (__stack_start = ALIGN (__stack_align));
-    PROVIDE (__stack_shift = LOG2CEIL( ALIGN (__stack_size_min + __tcb_size, __stack_align)));
-    PROVIDE (__stack_size = 1 << __stack_shift);
-
-    /* Default boot hart */
-    PROVIDE (__boot_hart = 0);
+  /* End of uninitalized data segement */
+  _end = .;
 }
+

@@ -1,12 +1,12 @@
 basedir := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 srcdir := $(basedir)/src
 
-PROGRAMS ?= sha3-sw sha3-rocc test_ascon charcount
+PROGRAMS ?= sha3-sw sha3-rocc
 
 CC := $(TARGET)-gcc
 OBJDUMP := $(TARGET)-objdump
 
-CFLAGS += -I $(srcdir) -DHOST_DEBUG=1
+CFLAGS += -I $(srcdir)
 
 hdrs := $(wildcard *.h) $(wildcard $(srcdir)/*.h)
 objs ?=
@@ -34,9 +34,6 @@ dumps: $(addsuffix .dump,$(PROGRAMS))
 .PHONY: clean
 clean:
 	rm -f -- *.riscv *.o *.dump
-	
-ascon.riscv: $(wildcard test_ascon/*.c) $(wildcard test_ascon/*.h)
-	$(CC) $(CFLAGS) -L libgloss -I test_ascon $^ -o $@
 
 .SUFFIXES:
 .SUFFIXES: .o .c .S

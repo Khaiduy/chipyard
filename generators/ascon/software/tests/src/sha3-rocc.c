@@ -62,14 +62,14 @@ int main() {
 #else /* FIPS 202 */
     {203,52,27,85,46,79,152,228,86,138,201,206,253,168,255,107,122,177,65,68,231,19,70,198,64,90,192,80,206,234,168,159};
 #endif
-    sha3ONE(input, sizeof(input), result);
+    //sha3ONE(input, sizeof(input), result);
     for(i = 0; i < SHA3_256_DIGEST_SIZE; i++){
       printf("output[%d]:%d ==? results[%d]:%d \n",i,output[i],i,result[i]);
-      //if(output[i] != result[i]) {
-      //  printf("Failed: Outputs don't match!\n");
-      //  printf("SHA execution took %lu cycles\n", end - start);
-      //  return 1;
-      //}
+      if(output[i] != result[i]) {
+        printf("Failed: Outputs don't match!\n");
+        printf("SHA execution took %lu cycles\n", end - start);
+        return 1;
+      }
     }
   } while(0);
 
