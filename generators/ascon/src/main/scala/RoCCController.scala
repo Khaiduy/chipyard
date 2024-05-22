@@ -11,7 +11,7 @@ import org.chipsalliance.cde.config._
 
 
 object State extends ChiselEnum {
-  val s_idle, s_read, s_write, s_wait, s_wait_2, r_idle = Value
+  val s_idle, s_read, s_write, s_wait, s_wait_2, r_idle, permutation_s, update_buff_s = Value
 }
 
 import State._
@@ -142,6 +142,12 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   io.decoupler_io.dmem_req_data     := Bits(0, 32)
 
   io.decoupler_io.rocc_req_ready    := false.B
+  io.bb_io.x0_in := Bits(0, 64)
+  io.bb_io.x1_in := Bits(0, 64)
+  io.bb_io.x2_in := Bits(0, 64)
+  io.bb_io.x3_in := Bits(0, 64)
+  io.bb_io.x4_in := Bits(0, 64)
+
 
   val bbOutVec = VecInit(Seq(
     io.bb_io.x0_out(31, 0),
@@ -256,11 +262,32 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
       stateReg := s_wait_2
     }
     is(s_wait_2){
-      stateReg := s_write
+      stateReg := permutation_s
+    }
+    is(permutation_s){
+      when(rcon_in_reg > UInt(1)){
+        buffer(0) := io.bb_io.x0_out(31, 0)
+        buffer(1) := io.bb_io.x0_out(63, 32)
+        buffer(2) := io.bb_io.x1_out(31, 0)
+        buffer(3) := io.bb_io.x1_out(63, 32)
+        buffer(4) := io.bb_io.x2_out(31, 0)
+        buffer(5) := io.bb_io.x2_out(63, 32)
+        buffer(6) := io.bb_io.x3_out(31, 0)
+        buffer(7) := io.bb_io.x3_out(63, 32)
+        buffer(8) := io.bb_io.x4_out(31, 0)
+        buffer(9) := io.bb_io.x4_out(63, 32)
+        rcon_in_reg := rcon_in_reg - UInt(1)
+        stateReg := permutation_s
+      }.otherwise{
+        stateReg := s_write
+      }
+
     }
     is(s_write){
       //we are writing
       //request
+
+
 
       io.decoupler_io.dmem_req_val := windex < 10.U
       io.decoupler_io.dmem_req_addr := out_addr
@@ -324,11 +351,7 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
       //buffer_valid := Bool(true)
     }
   }
-  io.bb_io.x0_in := Cat(buffer(1), buffer(0))
-  io.bb_io.x1_in := Cat(buffer(3), buffer(2))
-  io.bb_io.x2_in := Cat(buffer(5), buffer(4))
-  io.bb_io.x3_in := Cat(buffer(7), buffer(6))
-  io.bb_io.x4_in := Cat(buffer(9), buffer(8))
+
 
   //Finish dealing with mem
   //***************************************************************************************
@@ -350,6 +373,11 @@ class RoCCController (override val xLen: Int)(override implicit val p: Parameter
   //io.bb_io.x2_in := x2_in_reg
   //io.bb_io.x3_in := x3_in_reg
   //io.bb_io.x4_in := x4_in_reg
+  io.bb_io.x0_in := Cat(buffer(1), buffer(0))
+  io.bb_io.x1_in := Cat(buffer(3), buffer(2))
+  io.bb_io.x2_in := Cat(buffer(5), buffer(4))
+  io.bb_io.x3_in := Cat(buffer(7), buffer(6))
+  io.bb_io.x4_in := Cat(buffer(9), buffer(8))
   io.bb_io.rcon  := rcon_in_reg
   val cmdReadPrev = RegNext(cmd_read, false.B) // Register to hold the previous value of cmd_read
   io.decoupler_io.rocc_resp_valid := cmd_read && !cmdReadPrev // Set rocc_resp_valid on positive edge of cmd_read
