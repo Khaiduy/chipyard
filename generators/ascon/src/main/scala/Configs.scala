@@ -27,16 +27,6 @@ class WithAsconRoccAccelBlackbox extends Config ((site, here, up) => {
   )
 })
 
-class WithAccumExample extends Config ((site, here, up) => {
-
-  case BuildRoCC => up(BuildRoCC) ++ Seq(
-    (p: Parameters) => {
-      val accumulator = LazyModule(new CharCountExample(OpcodeSet.custom2)(p))
-      accumulator
-    }
-  )
-})
-
 class WithAsconRoccAccelCache extends Config ((site, here, up) => {
   case AsconBlackBox => false
   case AsconTLB => Some(TLBConfig(nSets = 1, nWays = 4, nSectors = 1, nSuperpageEntries = 1))

@@ -27,11 +27,6 @@ class RocketAsconCacheConfigs extends Config(
     new ascon.WithAsconRoccAccelCache ++
     new chipyard.config.AbstractConfig)
 
-class RocketAccumConfigs extends Config(
-  new freechips.rocketchip.subsystem.WithRV32 ++            // set RocketTiles to be 32-bit
-    new freechips.rocketchip.subsystem.WithNSmallCores(1) ++
-    new ascon.WithAccumExample ++
-    new chipyard.config.AbstractConfig)
 class TinyRocket32Config extends Config(
   new freechips.rocketchip.subsystem.WithRV32 ++
   new chipyard.iobinders.WithDontTouchIOBinders(false) ++         // TODO FIX: Don't dontTouch the ports
