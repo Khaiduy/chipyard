@@ -1,7 +1,7 @@
 basedir := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 srcdir := $(basedir)/src
 
-PROGRAMS ?= sha3-sw sha3-rocc
+PROGRAMS ?= sha3-sw sha3-rocc aead demo_ascon
 
 CC := $(TARGET)-gcc
 OBJDUMP := $(TARGET)-objdump
