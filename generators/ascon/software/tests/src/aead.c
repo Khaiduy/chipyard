@@ -11,44 +11,31 @@
 
 #ifdef ASCON_AEAD_RATE
 
-forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+
+forceinline void ascon_loadkey(ascon_key_t* key, ascon_npub_t* npub, const uint8_t* k, const uint8_t* n) {
 #if CRYPTO_KEYBYTES == 16
   key->x[0] = LOAD(k, 8);
   key->x[1] = LOAD(k + 8, 8);
+  npub->x[0] = LOAD(n, 8);
+  npub->x[1] = LOAD(n + 8, 8);
 #else /* CRYPTO_KEYBYTES == 20 */
   key->x[0] = KEYROT(0, LOADBYTES(k, 4));
   key->x[1] = LOADBYTES(k + 4, 8);
   key->x[2] = LOADBYTES(k + 12, 8);
 #endif
 }
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key, const ascon_npub_t* npub) {
 
-forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
-                                const uint8_t* npub) {
-#if CRYPTO_KEYBYTES == 16
-  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
-  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
-  s->x[1] = key->x[0];
-  s->x[2] = key->x[1];
-#else /* CRYPTO_KEYBYTES == 20 */
-  s->x[0] = key->x[0] ^ ASCON_80PQ_IV;
-  s->x[1] = key->x[1];
-  s->x[2] = key->x[2];
-#endif
-  s->x[3] = LOAD(npub, 8);
-  s->x[4] = LOAD(npub + 8, 8);
-  printstate("init 1st key xor", s);
-  P(s, 12);
-#if CRYPTO_KEYBYTES == 16
-  s->x[3] ^= key->x[0];
-  s->x[4] ^= key->x[1];
-#else /* CRYPTO_KEYBYTES == 20 */
-  s->x[2] ^= key->x[0];
-  s->x[3] ^= key->x[1];
-  s->x[4] ^= key->x[2];
-#endif
-  printstate("init 2nd key xor", s);
+  ROCC_INSTRUCTION_SS(1, &key->w[0], &npub->w[0], 7);
+  ROCC_INSTRUCTION_S(1, &s->x[0], 8);
+  //asm volatile ("fence" ::: "memory");
+  //printf("Using the rocc permutation\n");
+  //P(s, 12);
+  //printstate("init 1st key xor", s);
+  //s->x[3] ^= key->x[0];
+  //s->x[4] ^= key->x[1];
+  //printstate("init 2nd key xor", s);
 }
-
 forceinline void ascon_adata(ascon_state_t* s, const uint8_t* ad,
                              uint64_t adlen) {
   const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
@@ -188,15 +175,16 @@ forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
 int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
                         const unsigned char* m, unsigned long long mlen,
                         const unsigned char* ad, unsigned long long adlen,
-                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* nsec, const unsigned char* n,
                         const unsigned char* k) {
   ascon_state_t s;
   (void)nsec;
   *clen = mlen + CRYPTO_ABYTES;
   /* perform ascon computation */
   ascon_key_t key;
-  ascon_loadkey(&key, k);
-  ascon_initaead(&s, &key, npub);
+  ascon_npub_t npub;
+  ascon_loadkey(&key, &npub, k, n);
+  ascon_initaead(&s, &key, &npub);
   ascon_adata(&s, ad, adlen);
   ascon_encrypt(&s, c, m, mlen);
   ascon_final(&s, &key);
@@ -205,11 +193,10 @@ int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
   STOREBYTES(c + mlen + 8, s.x[4], 8);
   return 0;
 }
-
 int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
                         unsigned char* nsec, const unsigned char* c,
                         unsigned long long clen, const unsigned char* ad,
-                        unsigned long long adlen, const unsigned char* npub,
+                        unsigned long long adlen, const unsigned char* n,
                         const unsigned char* k) {
   ascon_state_t s;
   (void)nsec;
@@ -217,8 +204,9 @@ int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
   *mlen = clen = clen - CRYPTO_ABYTES;
   /* perform ascon computation */
   ascon_key_t key;
-  ascon_loadkey(&key, k);
-  ascon_initaead(&s, &key, npub);
+  ascon_npub_t npub;
+  ascon_loadkey(&key, &npub, k, n);
+  ascon_initaead(&s, &key, &npub);
   ascon_adata(&s, ad, adlen);
   ascon_decrypt(&s, m, c, clen);
   ascon_final(&s, &key);

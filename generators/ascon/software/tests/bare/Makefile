@@ -15,7 +15,8 @@ LDFLAGS := -static -nostartfiles -lgcc -march=$(ARCH) -mabi=$(ABI)
 
 PROGRAMS := sha3-rocc sha3-sw
 
-objs := crt.o syscalls.o aead.o
+objs := crt.o syscalls.o aead.o printstate.o 
+
 ldscript := htif.ld
 
 include $(bmarkdir)/../common.mk

@@ -15,6 +15,7 @@ typedef union {
 #ifdef ASCON_AEAD_RATE
 
 #define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+#define ASCON_NPUBWORDS (CRYPTO_NPUBBYTES + 7) / 8
 
 typedef union {
   uint64_t x[ASCON_KEYWORDS];
@@ -22,11 +23,16 @@ typedef union {
   uint8_t b[ASCON_KEYWORDS][8];
 } ascon_key_t;
 
+typedef union {
+  uint64_t x[ASCON_NPUBWORDS];
+  uint32_t w[ASCON_NPUBWORDS][2];
+  uint8_t b[ASCON_NPUBWORDS][8];
+} ascon_npub_t;
+
 #if !ASCON_INLINE_MODE
 
-void ascon_loadkey(ascon_key_t* key, const uint8_t* k);
-void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
-                    const uint8_t* npub);
+void ascon_loadkey(ascon_key_t* key, ascon_npub_t* npub, const uint8_t* k, const uint8_t* n);
+void ascon_initaead(ascon_state_t* s, const ascon_key_t* key, const ascon_npub_t* npub);
 void ascon_adata(ascon_state_t* s, const uint8_t* ad, uint64_t adlen);
 void ascon_encrypt(ascon_state_t* s, uint8_t* c, const uint8_t* m,
                    uint64_t mlen);

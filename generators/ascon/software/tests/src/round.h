@@ -46,88 +46,17 @@ forceinline void ROUND(ascon_state_t* s, uint8_t C) {
 
 #if ASCON_ROCC_PERMUTATION
 void perform_rocc_instructions(uint8_t rcon, ascon_state_t *state) {
-    /*ROCC_INSTRUCTION_S(1, rcon, 5);
-
-    ROCC_INSTRUCTION_SS(1, state->w[0][0], state->w[0][1], 0);
-    ROCC_INSTRUCTION_SS(1, state->w[1][0], state->w[1][1], 1);
-    ROCC_INSTRUCTION_SS(1, state->w[2][0], state->w[2][1], 2);
-    ROCC_INSTRUCTION_SS(1, state->w[3][0], state->w[3][1], 3);
-    ROCC_INSTRUCTION_SS(1, state->w[4][0], state->w[4][1], 4);
-
-    ROCC_INSTRUCTION_D(0, state->w[0][1], 0);
-    ROCC_INSTRUCTION_D(0, state->w[0][0], 1);
-    ROCC_INSTRUCTION_D(0, state->w[1][1], 2);
-    ROCC_INSTRUCTION_D(0, state->w[1][0], 3);
-    ROCC_INSTRUCTION_D(0, state->w[2][1], 4);
-    ROCC_INSTRUCTION_D(0, state->w[2][0], 5);
-    ROCC_INSTRUCTION_D(0, state->w[3][1], 6);
-    ROCC_INSTRUCTION_D(0, state->w[3][0], 7);
-    ROCC_INSTRUCTION_D(0, state->w[4][1], 8);
-    ROCC_INSTRUCTION_D(0, state->w[4][0], 9);*/
-    
-    //asm volatile ("fence");
-    
 
     ROCC_INSTRUCTION_SS(1, &state->w[0], rcon, 6);
     
 }
 
 forceinline void PROUNDS(ascon_state_t* s, int nr) {
-  //printf("Using the RoCC permutation\n");
-  //do {
-    perform_rocc_instructions(nr, s);
-  //  nr--;
-  //} while (nr != 0);
-  
+  perform_rocc_instructions(nr, s);
   asm volatile ("fence" ::: "memory");
 }
 
-//this code is to test the difference between hardware and software
-/*forceinline void PROUNDS(ascon_state_t* s, int nr) {
-  int i = START(nr);
-  
-  //printf("i = 0x%016x and nr = 0x%016x\n", i, nr);
-  do {
-    //printf("Print the original state:\n");
-    //  for (int i = 0; i < 5; i++) {
-    //  printf("x[%d] = 0x%016llx\n", i, s->x[i]);
-    //}
-    ascon_state_t temp_state = *s;
-    ROUND(s, RC(i));
-    i += INC;
-    
-    printf("i = 0x%016x and nr = 0x%016x\n", i, nr);
-    
-    printf("Software state:\n");
-    for (int i = 0; i < 5; i++) {
-        printf("x[%d] = 0x%016llx\n", i, s->x[i]);
-    }
-    
-    //printf("And the temp state:\n");
-    //for (int i = 0; i < 5; i++) {
-    //  printf("x[%d] = 0x%016llx\n", i, temp_state.x[i]);
-    //}
-    printf("State using RoCC:\n");
-    perform_rocc_instructions(nr, &temp_state);
-    nr--;
-    for (int i = 0; i < 5; i++) {
-      printf("x[%d] = 0x%016llx\n", i, temp_state.x[i]);
-    }
-    
-    //Compare the state of RoCC and software
-    for (int i = 0; i < 5; i++) {
-    if(s->x[i] != temp_state.x[i])
-      printf("Error\n");
-    }   
-    
-
-    
-    
-  } while (i != END);
-}*/
-
 #else
-
 
 //This is the original ROUND using software only
 forceinline void PROUNDS(ascon_state_t* s, int nr) {
