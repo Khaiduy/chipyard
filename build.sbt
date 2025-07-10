@@ -338,6 +338,27 @@ lazy val chipyard_fpga = (project in file("./fpga"))
   .dependsOn(chipyard, fpga_shells)
   .settings(commonSettings)
 
+lazy val usb_fpga_shells = (project in file("./usb/fpga-shells"))
+  .dependsOn(rocketchip, rocketchip_blocks)
+  .settings(libraryDependencies ++= rocketLibDeps.value)
+  .settings(commonSettings)
+
+lazy val usb = (project in file("./usb"))
+  .dependsOn(chipyard, usb_fpga_shells)
+  .settings(commonSettings)
+
+
+lazy val demo_fpga_shells = (project in file("./demo/fpga-shells"))
+  .dependsOn(rocketchip, rocketchip_blocks)
+  .settings(libraryDependencies ++= rocketLibDeps.value)
+  .settings(commonSettings)
+
+lazy val demo = (project in file("./demo"))
+  .dependsOn(chipyard, demo_fpga_shells)
+  .settings(commonSettings)
+
+
+
 // Components of FireSim
 
 lazy val firrtl2 = freshProject("firrtl2", file("./tools/firrtl2"))
