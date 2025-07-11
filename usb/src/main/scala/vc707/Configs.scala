@@ -79,20 +79,23 @@ class WithVC707USBTweaks extends Config (
   //peripherals
   new WithDefaultPeripherals ++
 
-
   // other configuration
-  new chipyard.config.WithTLBackingMemory ++ // use TL backing memory
   new WithSystemModifications ++ // setup busses, use sdboot bootrom, setup ext. mem. size
   new chipyard.config.WithNoDebug ++ // remove debug module
   new freechips.rocketchip.subsystem.WithoutTLMonitors ++
-  new freechips.rocketchip.subsystem.WithNMemoryChannels(1)
-  // new chipyard.config.WithBroadcastManager // no l2
+  new chipyard.config.WithTLBackingMemory ++ // use TL DDR backing memory interface
+  new freechips.rocketchip.subsystem.WithNMemoryChannels(1) ++
+  new chipyard.config.WithBroadcastManager // no l2
 )
 
 
 class RocketVC707Config extends Config (
   new WithVC707USBTweaks ++
-  new freechips.rocketchip.rocket.WithNMedCoresUSB(1) ++
+  new freechips.rocketchip.rocket.WithNRV32Cores(1) ++
+  new freechips.rocketchip.rocket.WithL1ICacheSets(64) ++ //2KB I-cache
+  new freechips.rocketchip.rocket.WithL1ICacheWays(4) ++
+  new freechips.rocketchip.rocket.WithL1DCacheSets(64) ++ //2KB D-cache
+  new freechips.rocketchip.rocket.WithL1DCacheWays(4) ++
   new chipyard.config.AbstractConfig
 )
 
