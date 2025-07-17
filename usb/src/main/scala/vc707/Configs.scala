@@ -23,7 +23,9 @@ import chipyard.harness._
 
 class WithDefaultPeripherals extends Config((site, here, up) => {
   case PeripheryUARTKey => List(UARTParams(address = BigInt(0x64000000L)))
+  // case PeripheryUARTKey => List(UARTParams(address = BigInt(0x64020000L)))
   case PeripherySPIKey => List(SPIParams(rAddress = BigInt(0x64001000L)))
+  // case PeripherySPIKey => List(SPIParams(rAddress = BigInt(0x64003000L)))
 })
 
 class WithSystemModifications extends Config((site, here, up) => {
@@ -78,6 +80,7 @@ class WithVC707USBTweaks extends Config (
   
   //peripherals
   new WithDefaultPeripherals ++
+  new chipyard.usb.mkv.WithMKV(address = BigInt(0x64005000L)) ++ // add MKV peripherals
 
   // other configuration
   new WithSystemModifications ++ // setup busses, use sdboot bootrom, setup ext. mem. size
