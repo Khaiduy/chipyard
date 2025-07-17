@@ -344,7 +344,7 @@ lazy val usb_fpga_shells = (project in file("./usb/fpga-shells"))
   .settings(commonSettings)
 
 lazy val usb = (project in file("./usb"))
-  .dependsOn(chipyard, usb_fpga_shells)
+  .dependsOn(chipyard, fpga_shells)
   .settings(commonSettings)
 
 
