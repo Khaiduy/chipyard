@@ -30,6 +30,21 @@ ifeq ($(SUB_PROJECT),vc707)
 	FPGA_BRAND        ?= xilinx
 endif
 
+ifeq ($(SUB_PROJECT),arty100t)
+	SBT_PROJECT       ?= usb
+	MODEL             ?= Arty100THarness
+	VLOG_MODEL        ?= Arty100THarness
+	MODEL_PACKAGE     ?= usb.fpga.arty100t
+	CONFIG            ?= RocketArty100TUSBConfig
+	CONFIG_PACKAGE    ?= usb.fpga.arty100t
+	GENERATOR_PACKAGE ?= chipyard
+	TB                ?= none # unused
+	TOP               ?= ChipTop
+	BOARD             ?= arty_a7_100
+	FPGA_BRAND        ?= xilinx
+endif
+
+
 export USE_CHISEL6=1
 
 include $(base_dir)/variables.mk
