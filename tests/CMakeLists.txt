@@ -40,14 +40,14 @@ set(CMAKE_EXECUTABLE_SUFFIX            ".riscv")
 #################################
 
 # CPU architecture
-set(ARCH                "rv64imafd")
-set(ABI                 "lp64d")
+set(ARCH                "rv64imac")
+set(ABI                 "lp64")
 set(CMODEL              "medany")
 set(ARCH_FLAGS          -march=${ARCH} -mabi=${ABI} -mcmodel=${CMODEL})
 
 # spec
-set(SPECS               "htif_nano.specs")
-set(SPEC_FLAGS          -specs=${SPECS})
+#set(SPECS               "htif.specs")
+#set(SPEC_FLAGS          -specs=${SPECS})
 
 # linker script
 set(LINKER_SCRIPT       "htif.ld")

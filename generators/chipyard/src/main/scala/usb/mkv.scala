@@ -29,7 +29,7 @@ case class MKVParams
 case object MKVKeys extends Field[Option[MKVParams]](None)
 
 class mkv extends BlackBox with HasBlackBoxResource {
-    override def desiredName = "mkv"
+    override def desiredName = "x25519"
     val io = IO(new Bundle {
     // Inputs
     val clk               = Input(Clock())
@@ -60,7 +60,7 @@ class mkv extends BlackBox with HasBlackBoxResource {
 }
 
 class MKVTL(params: MKVParams, beatBytes: Int)(implicit p: Parameters) extends ClockSinkDomain(ClockSinkParameters())(p){
-    val device = new SimpleDevice("mkv", Seq("sifive,mkv-0.1"))
+    val device = new SimpleDevice("x25519", Seq("sifive,x25519-0.1"))
     val node = TLRegisterNode(Seq(AddressSet(params.address, 4096-1)), device, "reg/control", beatBytes=beatBytes)
 
     override lazy val module = new mkvImpl
@@ -195,7 +195,7 @@ trait CanHavePeripheryMKV { this: BaseSubsystem =>
 
 class WithMKV(address: BigInt) extends Config((site, here, up) => {
     case MKVKeys => {
-        println(f"Setting MKV address: 0x${address}%X")
+        println(f"Setting x25519 address: 0x${address}%X")
         Some(MKVParams(address = address))
     }
 })

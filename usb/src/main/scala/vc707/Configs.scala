@@ -94,7 +94,7 @@ class WithVC707USBTweaks extends Config (
 
 class RocketVC707Config extends Config (
   new WithVC707USBTweaks ++
-  new freechips.rocketchip.rocket.WithNRV32Cores(1) ++
+  new freechips.rocketchip.rocket.WithNBigCores(1) ++
   new freechips.rocketchip.rocket.WithL1ICacheSets(64) ++ //2KB I-cache
   new freechips.rocketchip.rocket.WithL1ICacheWays(4) ++
   new freechips.rocketchip.rocket.WithL1DCacheSets(64) ++ //2KB D-cache

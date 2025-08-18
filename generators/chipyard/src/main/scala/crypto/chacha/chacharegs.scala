@@ -1,0 +1,52 @@
+package chipyard.crypto.chacha
+
+object ChachaRegs {
+  val key_0           = 0x100
+  val key_1           = 0x104
+  val key_2           = 0x108
+  val key_3           = 0x10C
+  val key_4           = 0x110
+  val key_5           = 0x114
+  val key_6           = 0x118
+  val key_7           = 0x11C
+  val nonce_0         = 0x120
+  val nonce_1         = 0x124
+  val nonce_2         = 0x128
+  val block_counter   = 0x12C
+  val in_0            = 0x130
+  val in_1            = 0x134
+  val in_2            = 0x138
+  val in_3            = 0x13C
+  val in_4            = 0x140
+  val in_5            = 0x144
+  val in_6            = 0x148
+  val in_7            = 0x14C
+  val in_8            = 0x150
+  val in_9            = 0x154
+  val in_10           = 0x158
+  val in_11           = 0x15C
+  val in_12           = 0x160
+  val in_13           = 0x164
+  val in_14           = 0x168
+  val in_15           = 0x16C
+  val rst_core        = 0x170
+  val init            = 0x174
+  val next            = 0x178
+  val ready           = 0x17C
+  val out_0           = 0x180
+  val out_1           = 0x184
+  val out_2           = 0x188
+  val out_3           = 0x18C
+  val out_4           = 0x190
+  val out_5           = 0x194
+  val out_6           = 0x198
+  val out_7           = 0x19C
+  val out_8           = 0x200
+  val out_9           = 0x204
+  val out_10          = 0x208
+  val out_11          = 0x20C
+  val out_12          = 0x210
+  val out_13          = 0x214
+  val out_14          = 0x218
+  val out_15          = 0x21C
+}

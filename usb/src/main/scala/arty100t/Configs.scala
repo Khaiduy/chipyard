@@ -25,6 +25,11 @@ import sifive.fpgashells.shell.xilinx.{ArtyDDRSize}
 
 import chipyard.{BuildSystem, ExtTLMem}
 import chipyard.harness._
+import chipyard.crypto.trng._
+import chipyard.hpke.x25519._
+import chipyard.crypto.chacha._
+import chipyard.crypto.poly._
+import chipyard.crypto.aes._
 
 // don't use FPGAShell's DesignKey
 class WithNoDesignKey extends Config((site, here, up) => {
@@ -80,7 +85,15 @@ class WithArty100TUSBTweaks(freqMHz: Double = 50) extends Config(
   new WithArty100TUART ++
   new WithArty100TSPISDCardHarnessBinder ++
   new WithDefaultPeripherals ++
-  new chipyard.usb.mkv.WithMKV(address = BigInt(0x7000000L)) ++ // add MKV peripherals
+
+  new WithX25519(address = BigInt(0x64004000L)) ++ // add X25519 peripherals
+  //new WithTRNG(address = BigInt(0x64005000L), asic_impl=false, useXDC=true) ++
+  new WithCHACHA(address = BigInt(0x64006000L)) ++
+  new WithPOLY(address = BigInt(0x64007000L)) ++
+  new WithAES(address = BigInt(0x64009000L)) ++
+
+  new chipyard.example.WithGCD(useAXI4=false, useBlackBox=false) ++
+    //new chipyard.crypto.ecdsa.WithECDSA(address = BigInt(0x64008000L)) ++
   new WithArty100TJTAG ++
   new WithNoDesignKey ++
 
@@ -94,7 +107,7 @@ class WithArty100TUSBTweaks(freqMHz: Double = 50) extends Config(
 class RocketArty100TUSBConfig extends Config(
   new WithArty100TUSBTweaks ++
   new chipyard.config.WithBroadcastManager ++ // no l2
-  new freechips.rocketchip.rocket.WithNRV32Cores(1) ++  // single rocket-core
+  new freechips.rocketchip.rocket.WithNSmallCores(1) ++  // single rocket-core
   new chipyard.config.AbstractConfig)
 
 class RocketArty100TConfig extends Config(

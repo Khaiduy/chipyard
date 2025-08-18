@@ -16,7 +16,7 @@ class FFTRocketConfig extends Config(
 // DOC include start: GCDTLRocketConfig
 class GCDTLRocketConfig extends Config(
   new chipyard.example.WithGCD(useAXI4=false, useBlackBox=false) ++          // Use GCD Chisel, connect Tilelink
-  new freechips.rocketchip.rocket.WithNHugeCores(1) ++
+  new freechips.rocketchip.rocket.WithNSmallCores(1) ++
   new chipyard.config.AbstractConfig)
 // DOC include end: GCDTLRocketConfig
 
