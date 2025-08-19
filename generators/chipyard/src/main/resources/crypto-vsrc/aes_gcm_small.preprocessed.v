@@ -3645,64 +3645,64 @@ endmodule
 
 module aes_gcm_v4_TOP(
 //6 pins
-input ICLK,
-input IRSTN,
-input [0:3] ICTRL,
-output OREADY,
+input ICLK_core,
+input IRSTN_core,
+input [0:3] ICTRL_core,
+output OREADY_core,
 
 //355 pins
-input [0:95] IIV,
-input IIV_VALID,
-input [0:255] IKEY,
-input IKEY_VALID,
-input IKEYLEN,
+input [0:95] IIV_core,
+input IIV_VALID_core,
+input [0:255] IKEY_core,
+input IKEY_VALID_core,
+input IKEYLEN_core,
 
 //130 pins
-input [0:127] IAAD,
-input IAAD_VALID,
+input [0:127] IAAD_core,
+input IAAD_VALID_core,
 
 //130 pins
-input [0:127] IBLOCK,
-input IBLOCK_VALID,
+input [0:127] IBLOCK_core,
+input IBLOCK_VALID_core,
 
 //129 pins
-input [0:127] ITAG,
-input ITAG_VALID,
+input [0:127] ITAG_core,
+input ITAG_VALID_core,
 
 //259 pins
-output [0:127] ORESULT,
-output ORESULT_VALID,
-output [0:127] OTAG,
-output OTAG_VALID,
-output OAUTHENTIC
+output [0:127] ORESULT_core,
+output ORESULT_VALID_core,
+output [0:127] OTAG_core,
+output OTAG_VALID_core,
+output OAUTHENTIC_core
 );
 
 aes_gcm_v4 U1(
-.iClk(ICLK),
-.iRstn(IRSTN),
-.iCtrl(ICTRL),
-.oReady(OREADY),
+.iClk(ICLK_core),
+.iRstn(IRSTN_core),
+.iCtrl(ICTRL_core),
+.oReady(OREADY_core),
 
-.iIV(IIV),
-.iIV_valid(IIV_VALID),
-.iKey(IKEY),
-.iKey_valid(IKEY_VALID),
-.iKeylen(IKEYLEN),
+.iIV(IIV_core),
+.iIV_valid(IIV_VALID_core),
+.iKey(IKEY_core),
+.iKey_valid(IKEY_VALID_core),
+.iKeylen(IKEYLEN_core),
 
-.iAad(IAAD), //Len
-.iAad_valid(IAAD_VALID),
+.iAad(IAAD_core), //Len
+.iAad_valid(IAAD_VALID_core),
 
-.iBlock(IBLOCK),
-.iBlock_valid(IBLOCK_VALID),
+.iBlock(IBLOCK_core),
+.iBlock_valid(IBLOCK_VALID_core),
 
-.iTag(ITAG),
-.iTag_valid(ITAG_VALID),
+.iTag(ITAG_core),
+.iTag_valid(ITAG_VALID_core),
 
-.oResult(ORESULT),
-.oResult_valid(ORESULT_VALID),
-.oTag(OTAG),
-.oTag_valid(OTAG_VALID),
-.oAuthentic(OAUTHENTIC)
+.oResult(ORESULT_core),
+.oResult_valid(ORESULT_VALID_core),
+.oTag(OTAG_core),
+.oTag_valid(OTAG_VALID_core),
+.oAuthentic(OAUTHENTIC_core)
 );
 
 endmodule
