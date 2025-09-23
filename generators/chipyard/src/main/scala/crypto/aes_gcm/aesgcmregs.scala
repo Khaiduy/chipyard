@@ -37,4 +37,6 @@ object AES_GCMRegs {
 
   val OAUTHENTIC = 0x1D0
   val IRESETN = 0x1D8
+
+  val IBLOCK_BYTES = 0x1E0
 }

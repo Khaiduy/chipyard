@@ -519,6 +519,8 @@ input iBlock_valid,
 
 input [0:127] iTag,	//DEC_MODE: compare with newly generated TAG
 input iTag_valid,
+
+input [3:0] iBlock_bytes,
 	//output
 output [0:127] oResult,
 output oResult_valid,
@@ -597,6 +599,14 @@ wire ghash_result_valid;
 reg ghash_result_valid_reg;
 wire ghash_result_valid_rising;
 
+// NEW: Compute bitmask for partial block zero-padding in GHASH
+wire [0:127] ghash_ctext;  // NEW: Masked input for partial blocks
+wire [7:0] valid_bytes = (iBlock_bytes == 4'd0) ? 8'd16 : {4'd0, iBlock_bytes};
+wire [7:0] pad_bytes = 16 - valid_bytes;
+wire [127:0] bitmask = {128{1'b1}} << (pad_bytes * 8);  // MSB valid bits 1, LSB pad bits 0
+// Apply mask only in CIPHER state (for blocks); ensures GHASH sees actual data + zero-pad
+assign ghash_ctext = (CIPHER) ? (mux_ghash_input2 & bitmask) : mux_ghash_input2;
+
 //----------------------------------------------------------------
 // Instantiations.
 //----------------------------------------------------------------
@@ -629,7 +639,7 @@ ghash_block_v2 GHASH(
 	//control
 .iNext(ghash_next),
 	//data
-.iCtext(mux_ghash_input2), 			    //AAD or Cipher text
+.iCtext(ghash_ctext), 			    //AAD or Cipher text
 .iCtext_valid(ghash_input_valid),
 .iY(ghash_result_reg), 					//previous ghash result
 .iHashkey(ghash_key_reg),				//hash key
@@ -3669,6 +3679,8 @@ input IBLOCK_VALID_core,
 input [0:127] ITAG_core,
 input ITAG_VALID_core,
 
+input [3:0] IBLOCK_BYTES_core,
+
 //259 pins
 output [0:127] ORESULT_core,
 output ORESULT_VALID_core,
@@ -3697,6 +3709,8 @@ aes_gcm_v4 U1(
 
 .iTag(ITAG_core),
 .iTag_valid(ITAG_VALID_core),
+
+.iBlock_bytes(IBLOCK_BYTES_core),
 
 .oResult(ORESULT_core),
 .oResult_valid(ORESULT_VALID_core),

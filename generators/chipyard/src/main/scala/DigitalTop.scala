@@ -34,6 +34,7 @@ class DigitalTop(implicit p: Parameters) extends ChipyardSystem
   with sifive.blocks.devices.spi.HasPeripherySPI // Enables optionally adding the sifive SPI port
   with chipyard.crypto.x25519.CanHavePeripheryX25519 // Enables optionally adding the X25519 accelerator
   with chipyard.crypto.aes_gcm.CanHavePeripheryAESGCM // Enables optionally adding the AESGCM accelerator
+  with chipyard.crypto.hmac_sha.CanHavePeripheryHMAC_SHA // Enables optionally adding the HMAC_SHA accelerator
   with chipyard.crypto.trng.CanHavePeripheryTRNG // Enables optionally adding the TRNG
   with chipyard.crypto.chacha.CanHavePeripheryCHACHA // Enables optionally adding the Chacha20
   with chipyard.crypto.poly.CanHavePeripheryPOLY // Enables optionally adding the Poly1305

@@ -50,6 +50,8 @@ class aes_gcm_core extends BlackBox with HasBlackBoxResource {
     val ITAG_core = Input(UInt(128.W))
     val ITAG_VALID_core = Input(Bool())
 
+    val IBLOCK_BYTES_core = Input(UInt(4.W))
+
     val ORESULT_core = Output(UInt(128.W))
     val ORESULT_VALID_core = Output(Bool())
     val OTAG_core = Output(UInt(128.W))
@@ -68,6 +70,7 @@ class AESGCMTL(params: AESGCMParams, beatBytes: Int)(implicit p: Parameters) ext
     withClockAndReset(clock, reset) {
       // Registers
       val ICTRL = RegInit(0.U(4.W))
+      val IBLOCK_BYTES = RegInit(0.U(4.W))
       val OREADY = WireDefault(0.U(1.W))
 
       // IIV (96 bits) split into 2x64-bit registers (padded to 128 bits)
@@ -114,6 +117,7 @@ class AESGCMTL(params: AESGCMParams, beatBytes: Int)(implicit p: Parameters) ext
       core_aes_gcm.io.IRSTN_core := !reset.asBool & IRESETN
 
       core_aes_gcm.io.ICTRL_core := ICTRL
+      core_aes_gcm.io.IBLOCK_BYTES_core := IBLOCK_BYTES
       OREADY := core_aes_gcm.io.OREADY_core
 
       // Concatenate 64-bit registers to form wide signals
@@ -226,6 +230,9 @@ class AESGCMTL(params: AESGCMParams, beatBytes: Int)(implicit p: Parameters) ext
         ),
         AES_GCMRegs.IRESETN -> Seq(
           RegField(1, IRESETN, RegFieldDesc("IRESETN", "Reset control", volatile = true))
+        ),
+        AES_GCMRegs.IBLOCK_BYTES -> Seq(
+          RegField(4, IBLOCK_BYTES, RegFieldDesc("IBLOCK_BYTES", "Last block bytes register"))
         )
       )
     }
