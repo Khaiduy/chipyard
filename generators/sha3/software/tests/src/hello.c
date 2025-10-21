@@ -21,7 +21,8 @@
 //#define AES_TEST
 //#define X25519_TEST
 //#define AESGCM_TEST
-#define HMAC_SHA_TEST
+// #define HMAC_SHA_TEST
+#define ASCON_TEST
 
 int main(int argc, char **arv) {
   
@@ -168,6 +169,10 @@ int main(int argc, char **arv) {
    test_hmacsha_compute_rfc4231((void*)hmac_sha_reg);
   #endif //AESGCM_TEST
 
+  #ifdef ASCON_TEST
+    printf("ASCON testing software\n");
+    hw_ascon_run_all_tests((void*)0x64006000L);  
+  #endif
 
   #ifdef ECDSA_TEST
   uart_puts((void*)uart,"Begin ECDSA hardware test:\r\n");

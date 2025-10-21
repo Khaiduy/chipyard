@@ -32,6 +32,6 @@ extern uintptr_t X25519_reg;
 void hwx25519_init(void* x25519ctrl, uint64_t scalar[4], uint64_t point_in[4]);
 void hwx25519_results(void* x25519ctrl, uint64_t* result);
 void hwx25519_reset(void* x25519ctrl);
-void hwx25519_selftest(void* x25519ctrl);
+// void hwx25519_selftest(void* x25519ctrl);
 
-void print_x25519_value(const char* label, uint64_t* value);  // Optional helper
+// void print_x25519_value(const char* label, uint64_t* value);  // Optional helper

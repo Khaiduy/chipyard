@@ -9,9 +9,10 @@ import freechips.rocketchip.subsystem.{InCluster}
 // --------------
 
 class RocketConfig extends Config(
-  new chipyard.crypto.x25519.WithX25519(address = BigInt(0x64004000L)) ++ // add X25519 peripherals
+//  new chipyard.crypto.x25519.WithX25519(address = BigInt(0x64004000L)) ++ // add X25519 peripherals
   new chipyard.crypto.aes_gcm.WithAESGCM(address = BigInt(0x64009000L)) ++ // add AES peripheral
   new chipyard.crypto.hmac_sha.WithHMAC_SHA(address = BigInt(0x64005000L)) ++ // add AES peripheral
+  new chipyard.crypto.ascon.WithASCON(address = BigInt(0x64006000L)) ++ // add ASCON peripheral
   new chipyard.config.WithBroadcastManager ++ // no l2
   new freechips.rocketchip.subsystem.WithoutTLMonitors ++
   new freechips.rocketchip.rocket.WithNSmallCores(1) ++         // single rocket-core

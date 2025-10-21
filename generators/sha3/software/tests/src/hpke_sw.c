@@ -487,8 +487,8 @@ static int sw_HpkeSealBase(Hpke* hpke, void* ephemeralKey, void* receiverKey,
     // print_hex_debug("Final nonce", nonce, 12);
     
     /* AES-GCM encryption */
-    // printf("AES-GCM Encryption\n");
-    // start_timing();
+    printf("AES-GCM Encryption\n");
+    start_timing();
     
     ret = wc_AesInit(&aes, hpke->heap, INVALID_DEVID);
     if (ret != 0) {
@@ -508,7 +508,7 @@ static int sw_HpkeSealBase(Hpke* hpke, void* ephemeralKey, void* receiverKey,
                            aad, aadSz);
     
     wc_AesFree(&aes);
-    // end_timing("AES-GCM Encryption");
+    end_timing("AES-GCM Encryption");
     
     if (ret != 0) {
         // printf("AES-GCM encryption failed: %d\n", ret);
@@ -529,13 +529,13 @@ static int sw_HpkeSealBase(Hpke* hpke, void* ephemeralKey, void* receiverKey,
 
 
 /* Static buffers for HPKE large data test (following AES-GCM pattern) */
-#define HPKE_SW_TEST_BYTES (1 * 1024)  // 1KB test size
+#define HPKE_SW_TEST_BYTES (1 * 128)  // 128 bytes test size
 
 /* Static buffers for large self-test (avoid libc malloc/free on baremetal) */
-static byte hpke_sw_plaintext_buf[HPKE_SW_TEST_BYTES];      // 1KB
-static byte hpke_sw_aad_buf[32];                            // 32 bytes AAD
-static byte hpke_sw_ciphertext_buf[HPKE_SW_TEST_BYTES + 16]; // 1KB + 16-byte tag
-static byte hpke_sw_decrypted_buf[HPKE_SW_TEST_BYTES];      // 1KB
+static byte hpke_sw_plaintext_buf[HPKE_SW_TEST_BYTES];      // 128 bytes
+static byte hpke_sw_aad_buf[16];                            // 16 bytes AAD
+static byte hpke_sw_ciphertext_buf[HPKE_SW_TEST_BYTES + 16]; // 128 bytes + 16-byte tag
+static byte hpke_sw_decrypted_buf[HPKE_SW_TEST_BYTES];      // 128 bytes
 
 
 /* Modified sw_HpkeOpenBase with debug output */
@@ -808,6 +808,208 @@ cleanup:
     return ret;
 }
 
+/* Performance test for HKDF and AES-GCM components */
+static int test_hpke_component_performance(void)
+{
+    printf("\n=== HPKE Component Performance Test (AES-GCM) ===\n");
+    
+    int ret = 0;
+    unsigned long start_cycles, end_cycles;
+    
+    /* Test data */
+    byte sharedSecret[CURVE25519_KEYSIZE];
+    byte info[] = "Performance test info";
+    word32 infoSz = strlen((char*)info);
+    byte key[16];  /* AES-128 key */
+    byte baseNonce[12];  /* GCM nonce */
+    
+    /* Fill shared secret with test data */
+    for (int i = 0; i < CURVE25519_KEYSIZE; i++) {
+        sharedSecret[i] = (byte)(i & 0xFF);
+    }
+    
+    printf("\n--- Testing HKDF Extract ---\n");
+    byte prkExtract[WC_SHA256_DIGEST_SIZE];
+    
+    start_cycles = rdcycle();
+    ret = wc_HKDF_Extract(WC_SHA256, 
+                          NULL, 0,  /* No salt */
+                          sharedSecret, CURVE25519_KEYSIZE, 
+                          prkExtract);
+    end_cycles = rdcycle();
+    
+    if (ret != 0) {
+        printf("HKDF Extract failed: %d\n", ret);
+        return ret;
+    }
+    
+    unsigned long extract_cycles = end_cycles - start_cycles;
+    printf("HKDF Extract: %lu cycles\n", extract_cycles);
+    print_hex_debug("PRK after Extract", prkExtract, sizeof(prkExtract));
+    
+    /* Test HKDF Expand for key */
+    printf("\n--- Testing HKDF Expand (for AES key) ---\n");
+    byte keyInfo[4] = {0x00, 0x01, 0x00, 0x10};  /* "key" + length 16 */
+    
+    start_cycles = rdcycle();
+    ret = wc_HKDF_Expand(WC_SHA256,
+                         prkExtract, sizeof(prkExtract),
+                         keyInfo, sizeof(keyInfo),
+                         key, 16);  /* AES-128 key size */
+    end_cycles = rdcycle();
+    
+    if (ret != 0) {
+        printf("HKDF Expand (key) failed: %d\n", ret);
+        return ret;
+    }
+    
+    unsigned long expand_key_cycles = end_cycles - start_cycles;
+    printf("HKDF Expand (key): %lu cycles\n", expand_key_cycles);
+    print_hex_debug("Derived AES key", key, 16);
+    
+    /* Test HKDF Expand for nonce */
+    printf("\n--- Testing HKDF Expand (for nonce) ---\n");
+    byte nonceInfo[7] = {0x00, 0x01, 0x00, 0x0C, 0x00, 0x00, 0x00};  /* "base_nonce" + length 12 */
+    
+    start_cycles = rdcycle();
+    ret = wc_HKDF_Expand(WC_SHA256,
+                         prkExtract, sizeof(prkExtract),
+                         nonceInfo, sizeof(nonceInfo),
+                         baseNonce, 12);  /* GCM nonce size */
+    end_cycles = rdcycle();
+    
+    if (ret != 0) {
+        printf("HKDF Expand (nonce) failed: %d\n", ret);
+        return ret;
+    }
+    
+    unsigned long expand_nonce_cycles = end_cycles - start_cycles;
+    printf("HKDF Expand (nonce): %lu cycles\n", expand_nonce_cycles);
+    print_hex_debug("Derived base nonce", baseNonce, 12);
+    
+    /* Test AES-GCM encryption with 64 bytes */
+    // printf("\n--- Testing AES-GCM Encryption (64 bytes) ---\n");
+    
+    #define AES_TEST_SIZE 64
+    byte plaintext[AES_TEST_SIZE];
+    byte ciphertext[AES_TEST_SIZE];
+    byte authTag[16];
+    byte aad[16];
+    
+    /* Fill test data */
+    for (int i = 0; i < AES_TEST_SIZE; i++) {
+        plaintext[i] = (byte)(i & 0xFF);
+    }
+    for (int i = 0; i < 16; i++) {
+        aad[i] = (byte)((i + 0x55) & 0xFF);
+    }
+    
+    // print_hex_debug("Plaintext (first 32 bytes)", plaintext, 32);
+    // print_hex_debug("AAD", aad, 16);
+    
+    start_cycles = rdcycle();
+    Aes aes;
+    ret = wc_AesInit(&aes, g_heap_hint, INVALID_DEVID);
+    if (ret != 0) {
+        printf("AES init failed: %d\n", ret);
+        return ret;
+    }
+    
+    ret = wc_AesGcmSetKey(&aes, key, 16);
+    if (ret != 0) {
+        printf("AES set key failed: %d\n", ret);
+        wc_AesFree(&aes);
+        return ret;
+    }
+    
+    
+    ret = wc_AesGcmEncrypt(&aes, ciphertext, plaintext, AES_TEST_SIZE,
+                           baseNonce, 12, authTag, 16,
+                           aad, 16);
+    
+    
+    wc_AesFree(&aes);
+    
+    if (ret != 0) {
+        printf("AES-GCM encryption failed: %d\n", ret);
+        return ret;
+    }
+    end_cycles = rdcycle();
+
+    unsigned long aes_gcm_encrypt_cycles = end_cycles - start_cycles;
+    printf("AES-GCM Encryption (64 bytes): %lu cycles\n", aes_gcm_encrypt_cycles);
+    // print_hex_debug("Ciphertext (first 32 bytes)", ciphertext, 32);
+    // print_hex_debug("Auth tag", authTag, 16);
+    
+    /* Test AES-GCM decryption with 64 bytes */
+    // printf("\n--- Testing AES-GCM Decryption (64 bytes) ---\n");
+    
+    byte decrypted[AES_TEST_SIZE];
+    
+    start_cycles = rdcycle();
+    ret = wc_AesInit(&aes, g_heap_hint, INVALID_DEVID);
+    if (ret != 0) {
+        printf("AES init failed: %d\n", ret);
+        return ret;
+    }
+    
+    ret = wc_AesGcmSetKey(&aes, key, 16);
+    if (ret != 0) {
+        printf("AES set key failed: %d\n", ret);
+        wc_AesFree(&aes);
+        return ret;
+    }
+    
+    ret = wc_AesGcmDecrypt(&aes, decrypted, ciphertext, AES_TEST_SIZE,
+                           baseNonce, 12, authTag, 16,
+                           aad, 16);
+    
+    wc_AesFree(&aes);
+    
+    if (ret != 0) {
+        printf("AES-GCM decryption failed: %d\n", ret);
+        return ret;
+    }
+    end_cycles = rdcycle();
+    
+    unsigned long aes_gcm_decrypt_cycles = end_cycles - start_cycles;
+    // printf("AES-GCM Decryption (64 bytes): %lu cycles\n", aes_gcm_decrypt_cycles);
+    // print_hex_debug("Decrypted (first 32 bytes)", decrypted, 32);
+    
+    /* Verify decryption */
+    printf("\n--- Verification ---\n");
+    if (XMEMCMP(plaintext, decrypted, AES_TEST_SIZE) != 0) {
+        printf("❌ Decrypted plaintext doesn't match original!\n");
+        
+        /* Find first mismatch */
+        for (int i = 0; i < AES_TEST_SIZE; i++) {
+            if (plaintext[i] != decrypted[i]) {
+                printf("First mismatch at byte %d: original=0x%02x decrypted=0x%02x\n", 
+                       i, plaintext[i], decrypted[i]);
+                break;
+            }
+        }
+        return -1;
+    }
+    
+    printf("✅ Plaintext verified successfully\n");
+    
+    /* Summary */
+    printf("\n=== Performance Summary ===\n");
+    printf("HKDF Extract:              %lu cycles\n", extract_cycles);
+    printf("HKDF Expand (key):         %lu cycles\n", expand_key_cycles);
+    printf("HKDF Expand (nonce):       %lu cycles\n", expand_nonce_cycles);
+    printf("Total HKDF:                %lu cycles\n", 
+           extract_cycles + expand_key_cycles + expand_nonce_cycles);
+    printf("AES-GCM Encrypt (64B):     %lu cycles\n", aes_gcm_encrypt_cycles);
+    printf("AES-GCM Decrypt (64B):     %lu cycles\n", aes_gcm_decrypt_cycles);
+    printf("Total AES-GCM:             %lu cycles\n", 
+           aes_gcm_encrypt_cycles + aes_gcm_decrypt_cycles);
+    printf("===========================\n");
+    
+    return 0;
+}
+
 /* Main function */
 int main(void)
 {
@@ -823,7 +1025,19 @@ int main(void)
         return -1;
     }
     
-    /* Test */
+    /* Run component performance test */
+    printf("\n=== RUNNING COMPONENT PERFORMANCE TEST ===\n");
+    int perf_result = test_hpke_component_performance();
+    
+    if (perf_result != 0) {
+        printf("\nCOMPONENT PERFORMANCE TEST FAILED!\n");
+        return perf_result;
+    }
+    
+    printf("\nCOMPONENT PERFORMANCE TEST PASSED!\n");
+    
+    /* Test full HPKE */
+    printf("\n=== RUNNING FULL HPKE TEST ===\n");
     int result = test_hpke_pure_software();
     
     unsigned long main_end = rdcycle();

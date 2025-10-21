@@ -734,7 +734,7 @@ module memory (
 
 // ========== RAM FPGA
 	reg	[63:0]	q_out;
-	reg	[63:0]	ram[0:63];
+	(* ram_style = "distributed" *) reg	[63:0]	ram[0:63];
 	always@(posedge clk) begin
 		if(we)	ram[addr] <= data;
 	end

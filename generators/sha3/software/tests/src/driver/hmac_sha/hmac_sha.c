@@ -269,312 +269,312 @@ int hmacsha_compute(void *hmac_shactrl,
     return 0;
 }
 
-/* Convert MAC from Vietnamese pattern to hex string */
-void print_mac_as_hex_string(uint64_t *mac, const char *label)
-{
-    printf("%s: ", label);
+// /* Convert MAC from Vietnamese pattern to hex string */
+// void print_mac_as_hex_string(uint64_t *mac, const char *label)
+// {
+//     printf("%s: ", label);
     
-    /* Each qword contains 4 bytes in Vietnamese pattern (lower 32 bits) */
-    for (int i = 0; i < 8; i++) {
-        uint32_t word = (uint32_t)(mac[i] & 0xFFFFFFFF);
+//     /* Each qword contains 4 bytes in Vietnamese pattern (lower 32 bits) */
+//     for (int i = 0; i < 8; i++) {
+//         uint32_t word = (uint32_t)(mac[i] & 0xFFFFFFFF);
         
-        /* Extract 4 bytes from the 32-bit word in big-endian order */
-        unsigned char byte0 = (word >> 24) & 0xFF;
-        unsigned char byte1 = (word >> 16) & 0xFF;
-        unsigned char byte2 = (word >> 8) & 0xFF;
-        unsigned char byte3 = (word >> 0) & 0xFF;
+//         /* Extract 4 bytes from the 32-bit word in big-endian order */
+//         unsigned char byte0 = (word >> 24) & 0xFF;
+//         unsigned char byte1 = (word >> 16) & 0xFF;
+//         unsigned char byte2 = (word >> 8) & 0xFF;
+//         unsigned char byte3 = (word >> 0) & 0xFF;
         
-        printf("%02x%02x%02x%02x", byte0, byte1, byte2, byte3);
-    }
-    printf("\n");
-}
+//         printf("%02x%02x%02x%02x", byte0, byte1, byte2, byte3);
+//     }
+//     printf("\n");
+// }
 
-/* RFC 4231 HMAC-SHA256 Test Vectors using hmacsha_compute */
-void test_hmacsha_compute_rfc4231(void *hmac_shactrl)
-{
-    printf("\n=== RFC 4231 HMAC-SHA256 Test Vectors (hmacsha_compute) ===\n");
+// /* RFC 4231 HMAC-SHA256 Test Vectors using hmacsha_compute */
+// void test_hmacsha_compute_rfc4231(void *hmac_shactrl)
+// {
+//     printf("\n=== RFC 4231 HMAC-SHA256 Test Vectors (hmacsha_compute) ===\n");
     
-    int total_tests = 0;
-    int passed_tests = 0;
+//     int total_tests = 0;
+//     int passed_tests = 0;
     
-    /* Test Case 1: Basic functionality test */
-    printf("\n--- RFC 4231 Test Case 1 ---\n");
-    printf("Key: 20 bytes of 0x0b\n");
-    printf("Data: 'Hi There' (8 bytes)\n");
+//     /* Test Case 1: Basic functionality test */
+//     printf("\n--- RFC 4231 Test Case 1 ---\n");
+//     printf("Key: 20 bytes of 0x0b\n");
+//     printf("Data: 'Hi There' (8 bytes)\n");
     
-    {
-        uint64_t key1[8] = {0};
-        uint64_t msg1[16] = {0};
-        uint64_t mac1[8];
+//     {
+//         uint64_t key1[8] = {0};
+//         uint64_t msg1[16] = {0};
+//         uint64_t mac1[8];
         
-        /* Key: 20 bytes of 0x0b in Vietnamese pattern */
-        /* 0x0b0b0b0b per 32-bit word */
-        key1[0] = 0x000000000b0b0b0bULL;  /* Bytes 0-3 */
-        key1[1] = 0x000000000b0b0b0bULL;  /* Bytes 4-7 */
-        key1[2] = 0x000000000b0b0b0bULL;  /* Bytes 8-11 */
-        key1[3] = 0x000000000b0b0b0bULL;  /* Bytes 12-15 */
-        key1[4] = 0x000000000b0b0b0bULL;  /* Bytes 16-19 */
-        /* Remaining key slots are 0 */
+//         /* Key: 20 bytes of 0x0b in Vietnamese pattern */
+//         /* 0x0b0b0b0b per 32-bit word */
+//         key1[0] = 0x000000000b0b0b0bULL;  /* Bytes 0-3 */
+//         key1[1] = 0x000000000b0b0b0bULL;  /* Bytes 4-7 */
+//         key1[2] = 0x000000000b0b0b0bULL;  /* Bytes 8-11 */
+//         key1[3] = 0x000000000b0b0b0bULL;  /* Bytes 12-15 */
+//         key1[4] = 0x000000000b0b0b0bULL;  /* Bytes 16-19 */
+//         /* Remaining key slots are 0 */
         
-        /* Data: "Hi There" = 0x4869205468657265 in Vietnamese pattern */
-        msg1[0] = 0x0000000048692054ULL;  /* "Hi T" */
-        msg1[1] = 0x0000000068657265ULL;  /* "here" */
+//         /* Data: "Hi There" = 0x4869205468657265 in Vietnamese pattern */
+//         msg1[0] = 0x0000000048692054ULL;  /* "Hi T" */
+//         msg1[1] = 0x0000000068657265ULL;  /* "here" */
         
-        /* Expected MAC: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7 */
-        uint64_t expected1[8] = {
-            0x00000000b0344c61ULL, 0x00000000d8db3853ULL,
-            0x000000005ca8afceULL, 0x00000000af0bf12bULL,
-            0x00000000881dc200ULL, 0x00000000c9833da7ULL,
-            0x0000000026e9376cULL, 0x000000002e32cff7ULL
-        };
+//         /* Expected MAC: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7 */
+//         uint64_t expected1[8] = {
+//             0x00000000b0344c61ULL, 0x00000000d8db3853ULL,
+//             0x000000005ca8afceULL, 0x00000000af0bf12bULL,
+//             0x00000000881dc200ULL, 0x00000000c9833da7ULL,
+//             0x0000000026e9376cULL, 0x000000002e32cff7ULL
+//         };
         
-        int result1 = hmacsha_compute(hmac_shactrl, SHA256, key1, msg1, 64, mac1);
-        total_tests++;
+//         int result1 = hmacsha_compute(hmac_shactrl, SHA256, key1, msg1, 64, mac1);
+//         total_tests++;
         
-        // printf("Result: %s\n", result1 == 0 ? "SUCCESS" : "FAILED");
-        if (result1 == 0) {
-            // printf("Computed MAC:\n");
-            // for (int i = 0; i < 8; i++) {
-            //     printf("  mac1[%d] = 0x%016llx\n", i, mac1[i]);
-            // }
+//         // printf("Result: %s\n", result1 == 0 ? "SUCCESS" : "FAILED");
+//         if (result1 == 0) {
+//             // printf("Computed MAC:\n");
+//             // for (int i = 0; i < 8; i++) {
+//             //     printf("  mac1[%d] = 0x%016llx\n", i, mac1[i]);
+//             // }
             
-            /* Check if result matches expected */
-            int match = 1;
-            for (int i = 0; i < 8; i++) {
-                if (mac1[i] != expected1[i]) {
-                    match = 0;
-                    break;
-                }
-            }
+//             /* Check if result matches expected */
+//             int match = 1;
+//             for (int i = 0; i < 8; i++) {
+//                 if (mac1[i] != expected1[i]) {
+//                     match = 0;
+//                     break;
+//                 }
+//             }
             
-            printf("Expected MAC: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7\n");
-            print_mac_as_hex_string(mac1, "Computed MAC");
-            printf("Test Case 1: %s\n", match ? "PASS " : "FAIL ");
-            if (match) passed_tests++;
-        }
-    }
+//             printf("Expected MAC: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7\n");
+//             print_mac_as_hex_string(mac1, "Computed MAC");
+//             printf("Test Case 1: %s\n", match ? "PASS " : "FAIL ");
+//             if (match) passed_tests++;
+//         }
+//     }
     
-    /* Test Case 2: Key = "Jefe", Data = "what do ya want for nothing?" */
-    printf("\n--- RFC 4231 Test Case 2 ---\n");
-    printf("Key: 'Jefe' (4 bytes)\n");
-    printf("Data: 'what do ya want for nothing?' (28 bytes)\n");
+//     /* Test Case 2: Key = "Jefe", Data = "what do ya want for nothing?" */
+//     printf("\n--- RFC 4231 Test Case 2 ---\n");
+//     printf("Key: 'Jefe' (4 bytes)\n");
+//     printf("Data: 'what do ya want for nothing?' (28 bytes)\n");
     
-    {
-        uint64_t key2[8] = {0};
-        uint64_t msg2[16] = {0};
-        uint64_t mac2[8];
+//     {
+//         uint64_t key2[8] = {0};
+//         uint64_t msg2[16] = {0};
+//         uint64_t mac2[8];
         
-        /* Key: "Jefe" = 0x4a656665 in Vietnamese pattern */
-        key2[0] = 0x000000004a656665ULL;
+//         /* Key: "Jefe" = 0x4a656665 in Vietnamese pattern */
+//         key2[0] = 0x000000004a656665ULL;
         
-        /* Data: "what do ya want for nothing?" in Vietnamese pattern */
-        /* "what" = 0x77686174, " do " = 0x20646f20 */
-        /* "ya w" = 0x79612077, "ant " = 0x616e7420 */
-        /* "for " = 0x666f7220, "noth" = 0x6e6f7468 */
-        /* "ing?" = 0x696e673f */
-        msg2[0] = 0x0000000077686174ULL;  /* "what" */
-        msg2[1] = 0x0000000020646f20ULL;  /* " do " */
-        msg2[2] = 0x0000000079612077ULL;  /* "ya w" */
-        msg2[3] = 0x00000000616e7420ULL;  /* "ant " */
-        msg2[4] = 0x00000000666f7220ULL;  /* "for " */
-        msg2[5] = 0x000000006e6f7468ULL;  /* "noth" */
-        msg2[6] = 0x00000000696e673fULL;  /* "ing?" */
+//         /* Data: "what do ya want for nothing?" in Vietnamese pattern */
+//         /* "what" = 0x77686174, " do " = 0x20646f20 */
+//         /* "ya w" = 0x79612077, "ant " = 0x616e7420 */
+//         /* "for " = 0x666f7220, "noth" = 0x6e6f7468 */
+//         /* "ing?" = 0x696e673f */
+//         msg2[0] = 0x0000000077686174ULL;  /* "what" */
+//         msg2[1] = 0x0000000020646f20ULL;  /* " do " */
+//         msg2[2] = 0x0000000079612077ULL;  /* "ya w" */
+//         msg2[3] = 0x00000000616e7420ULL;  /* "ant " */
+//         msg2[4] = 0x00000000666f7220ULL;  /* "for " */
+//         msg2[5] = 0x000000006e6f7468ULL;  /* "noth" */
+//         msg2[6] = 0x00000000696e673fULL;  /* "ing?" */
         
-        /* Expected MAC: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843 */
-        uint64_t expected2[8] = {
-            0x000000005bdcc146ULL, 0x00000000bf60754eULL,
-            0x000000006a042426ULL, 0x00000000089575c7ULL,
-            0x000000005a003f08ULL, 0x000000009d273983ULL,
-            0x000000009dec58b9ULL, 0x0000000064ec3843ULL
-        };
+//         /* Expected MAC: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843 */
+//         uint64_t expected2[8] = {
+//             0x000000005bdcc146ULL, 0x00000000bf60754eULL,
+//             0x000000006a042426ULL, 0x00000000089575c7ULL,
+//             0x000000005a003f08ULL, 0x000000009d273983ULL,
+//             0x000000009dec58b9ULL, 0x0000000064ec3843ULL
+//         };
         
-        int result2 = hmacsha_compute(hmac_shactrl, SHA256, key2, msg2, 224, mac2);
-        total_tests++;
+//         int result2 = hmacsha_compute(hmac_shactrl, SHA256, key2, msg2, 224, mac2);
+//         total_tests++;
         
-        // printf("Result: %s\n", result2 == 0 ? "SUCCESS" : "FAILED");
-        if (result2 == 0) {
-            // printf("Computed MAC:\n");
-            // for (int i = 0; i < 8; i++) {
-            //     printf("  mac2[%d] = 0x%016llx\n", i, mac2[i]);
-            // }
+//         // printf("Result: %s\n", result2 == 0 ? "SUCCESS" : "FAILED");
+//         if (result2 == 0) {
+//             // printf("Computed MAC:\n");
+//             // for (int i = 0; i < 8; i++) {
+//             //     printf("  mac2[%d] = 0x%016llx\n", i, mac2[i]);
+//             // }
             
-            /* Check if result matches expected */
-            int match = 1;
-            for (int i = 0; i < 8; i++) {
-                if (mac2[i] != expected2[i]) {
-                    match = 0;
-                    break;
-                }
-            }
+//             /* Check if result matches expected */
+//             int match = 1;
+//             for (int i = 0; i < 8; i++) {
+//                 if (mac2[i] != expected2[i]) {
+//                     match = 0;
+//                     break;
+//                 }
+//             }
             
-            printf("Expected MAC: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\n");
-            print_mac_as_hex_string(mac2, "Computed MAC");
-            printf("Test Case 2: %s\n", match ? "PASS " : "FAIL ");
-            if (match) passed_tests++;
-        }
-    }
+//             printf("Expected MAC: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\n");
+//             print_mac_as_hex_string(mac2, "Computed MAC");
+//             printf("Test Case 2: %s\n", match ? "PASS " : "FAIL ");
+//             if (match) passed_tests++;
+//         }
+//     }
     
-    /* Test Case 3: 50-byte key and data */
-    printf("\n--- RFC 4231 Test Case 3 ---\n");
-    printf("Key: 20 bytes of 0xaa\n");
-    printf("Data: 50 bytes of 0xdd\n");
+//     /* Test Case 3: 50-byte key and data */
+//     printf("\n--- RFC 4231 Test Case 3 ---\n");
+//     printf("Key: 20 bytes of 0xaa\n");
+//     printf("Data: 50 bytes of 0xdd\n");
     
-    {
-        uint64_t key3[8] = {0};
-        uint64_t msg3[16] = {0};
-        uint64_t mac3[8];
-        /* CORRECT: Pack 20 bytes of 0xaa into Vietnamese pattern */
-        for (int i = 0; i < 20; i++) {
-            int qword_idx = i / 4;
-            int byte_pos = 3 - (i % 4);
-            if (qword_idx < 8) {
-                key3[qword_idx] |= ((uint64_t)0xaa) << (8 * byte_pos);
-            }
-        }
+//     {
+//         uint64_t key3[8] = {0};
+//         uint64_t msg3[16] = {0};
+//         uint64_t mac3[8];
+//         /* CORRECT: Pack 20 bytes of 0xaa into Vietnamese pattern */
+//         for (int i = 0; i < 20; i++) {
+//             int qword_idx = i / 4;
+//             int byte_pos = 3 - (i % 4);
+//             if (qword_idx < 8) {
+//                 key3[qword_idx] |= ((uint64_t)0xaa) << (8 * byte_pos);
+//             }
+//         }
         
-        /* CORRECT: Pack 50 bytes of 0xdd into Vietnamese pattern */
-        for (int i = 0; i < 50; i++) {
-            int qword_idx = i / 4;
-            int byte_pos = 3 - (i % 4);
-            if (qword_idx < 16) {
-                msg3[qword_idx] |= ((uint64_t)0xdd) << (8 * byte_pos);
-            }
-        }
-            /* Debug: Show the pattern */
-        // printf("Key pattern (first 4 qwords):\n");
-        // for (int i = 0; i < 8; i++) {
-        //     printf("  key3[%d] = 0x%016llx\n", i, key3[i]);
-        // }
+//         /* CORRECT: Pack 50 bytes of 0xdd into Vietnamese pattern */
+//         for (int i = 0; i < 50; i++) {
+//             int qword_idx = i / 4;
+//             int byte_pos = 3 - (i % 4);
+//             if (qword_idx < 16) {
+//                 msg3[qword_idx] |= ((uint64_t)0xdd) << (8 * byte_pos);
+//             }
+//         }
+//             /* Debug: Show the pattern */
+//         // printf("Key pattern (first 4 qwords):\n");
+//         // for (int i = 0; i < 8; i++) {
+//         //     printf("  key3[%d] = 0x%016llx\n", i, key3[i]);
+//         // }
         
-        // printf("Message pattern (first 4 qwords):\n");
-        // for (int i = 8; i < 11; i++) {
-        //     printf("  msg3[%d] = 0x%016llx\n", i, msg3[i]);
-        // }
+//         // printf("Message pattern (first 4 qwords):\n");
+//         // for (int i = 8; i < 11; i++) {
+//         //     printf("  msg3[%d] = 0x%016llx\n", i, msg3[i]);
+//         // }
         
-        /* Expected MAC: 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe */
-        uint64_t expected3[8] = {
-            0x00000000773ea91eULL, 0x0000000036800e46ULL,
-            0x00000000854db8ebULL, 0x00000000d09181a7ULL,
-            0x000000002959098bULL, 0x000000003ef8c122ULL,
-            0x00000000d9635514ULL, 0x00000000ced565feULL
-        };
+//         /* Expected MAC: 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe */
+//         uint64_t expected3[8] = {
+//             0x00000000773ea91eULL, 0x0000000036800e46ULL,
+//             0x00000000854db8ebULL, 0x00000000d09181a7ULL,
+//             0x000000002959098bULL, 0x000000003ef8c122ULL,
+//             0x00000000d9635514ULL, 0x00000000ced565feULL
+//         };
         
-        int result3 = hmacsha_compute(hmac_shactrl, SHA256, key3, msg3, 400, mac3);
-        total_tests++;
+//         int result3 = hmacsha_compute(hmac_shactrl, SHA256, key3, msg3, 400, mac3);
+//         total_tests++;
         
-        // printf("Result: %s\n", result3 == 0 ? "SUCCESS" : "FAILED");
-        if (result3 == 0) {
-            // printf("Computed MAC:\n");
-            // for (int i = 0; i < 8; i++) {
-            //     printf("  mac3[%d] = 0x%016llx\n", i, mac3[i]);
-            // }
+//         // printf("Result: %s\n", result3 == 0 ? "SUCCESS" : "FAILED");
+//         if (result3 == 0) {
+//             // printf("Computed MAC:\n");
+//             // for (int i = 0; i < 8; i++) {
+//             //     printf("  mac3[%d] = 0x%016llx\n", i, mac3[i]);
+//             // }
             
-            /* Check if result matches expected */
-            int match = 1;
-            for (int i = 0; i < 8; i++) {
-                if (mac3[i] != expected3[i]) {
-                    match = 0;
-                    break;
-                }
-            }
+//             /* Check if result matches expected */
+//             int match = 1;
+//             for (int i = 0; i < 8; i++) {
+//                 if (mac3[i] != expected3[i]) {
+//                     match = 0;
+//                     break;
+//                 }
+//             }
             
-            printf("Expected MAC: 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe\n");
-            print_mac_as_hex_string(mac3, "Computed MAC");
-            printf("Test Case 3: %s\n", match ? "PASS " : "FAIL ");
-            if (match) passed_tests++;
-        }
-    }
+//             printf("Expected MAC: 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe\n");
+//             print_mac_as_hex_string(mac3, "Computed MAC");
+//             printf("Test Case 3: %s\n", match ? "PASS " : "FAIL ");
+//             if (match) passed_tests++;
+//         }
+//     }
 
-    /* Test Case 4: 25-byte key, 50-byte data */
-    printf("\n--- RFC 4231 Test Case 4 ---\n");
-    printf("Key: 25 bytes (0x0102030405060708090a0b0c0d0e0f10111213141516171819)\n");
-    printf("Data: 50 bytes of 0xcd\n");
+//     /* Test Case 4: 25-byte key, 50-byte data */
+//     printf("\n--- RFC 4231 Test Case 4 ---\n");
+//     printf("Key: 25 bytes (0x0102030405060708090a0b0c0d0e0f10111213141516171819)\n");
+//     printf("Data: 50 bytes of 0xcd\n");
 
-    {
-        uint64_t key4[8] = {0};
-        uint64_t msg4[16] = {0};
-        uint64_t mac4[8];
+//     {
+//         uint64_t key4[8] = {0};
+//         uint64_t msg4[16] = {0};
+//         uint64_t mac4[8];
         
-        /* CORRECTED: 25-byte incremental key in Vietnamese pattern */
-        unsigned char key_bytes[25] = {
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-            0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
-            0x15, 0x16, 0x17, 0x18, 0x19
-        };
+//         /* CORRECTED: 25-byte incremental key in Vietnamese pattern */
+//         unsigned char key_bytes[25] = {
+//             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+//             0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+//             0x15, 0x16, 0x17, 0x18, 0x19
+//         };
         
-        /* Pack 25-byte key into Vietnamese pattern */
-        for (int i = 0; i < 25; i++) {
-            int qword_idx = i / 4;
-            int byte_pos = 3 - (i % 4);
-            if (qword_idx < 8) {
-                key4[qword_idx] |= ((uint64_t)key_bytes[i]) << (8 * byte_pos);
-            }
-        }
+//         /* Pack 25-byte key into Vietnamese pattern */
+//         for (int i = 0; i < 25; i++) {
+//             int qword_idx = i / 4;
+//             int byte_pos = 3 - (i % 4);
+//             if (qword_idx < 8) {
+//                 key4[qword_idx] |= ((uint64_t)key_bytes[i]) << (8 * byte_pos);
+//             }
+//         }
         
-        /* CORRECT: Pack 50 bytes of 0xcd into Vietnamese pattern */
-        for (int i = 0; i < 50; i++) {
-            int qword_idx = i / 4;
-            int byte_pos = 3 - (i % 4);
-            if (qword_idx < 16) {
-                msg4[qword_idx] |= ((uint64_t)0xcd) << (8 * byte_pos);
-            }
-        }
+//         /* CORRECT: Pack 50 bytes of 0xcd into Vietnamese pattern */
+//         for (int i = 0; i < 50; i++) {
+//             int qword_idx = i / 4;
+//             int byte_pos = 3 - (i % 4);
+//             if (qword_idx < 16) {
+//                 msg4[qword_idx] |= ((uint64_t)0xcd) << (8 * byte_pos);
+//             }
+//         }
         
-        /* Debug: Show the corrected key pattern */
-        // printf("Corrected key pattern (Vietnamese):\n");
-        // for (int i = 0; i < 7; i++) {
-        //     if (key4[i] != 0) {
-        //         printf("  key4[%d] = 0x%016llx\n", i, key4[i]);
-        //     }
-        // }
+//         /* Debug: Show the corrected key pattern */
+//         // printf("Corrected key pattern (Vietnamese):\n");
+//         // for (int i = 0; i < 7; i++) {
+//         //     if (key4[i] != 0) {
+//         //         printf("  key4[%d] = 0x%016llx\n", i, key4[i]);
+//         //     }
+//         // }
         
-        /* Expected: 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b */
-        uint64_t expected4[8] = {
-            0x0000000082558a38ULL, 0x000000009a443c0eULL,
-            0x00000000a4cc8198ULL, 0x0000000099f2083aULL,
-            0x0000000085f0faa3ULL, 0x00000000e578f807ULL,
-            0x000000007a2e3ff4ULL, 0x000000006729665bULL
-        };
+//         /* Expected: 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b */
+//         uint64_t expected4[8] = {
+//             0x0000000082558a38ULL, 0x000000009a443c0eULL,
+//             0x00000000a4cc8198ULL, 0x0000000099f2083aULL,
+//             0x0000000085f0faa3ULL, 0x00000000e578f807ULL,
+//             0x000000007a2e3ff4ULL, 0x000000006729665bULL
+//         };
         
-        int result4 = hmacsha_compute(hmac_shactrl, SHA256, key4, msg4, 400, mac4);
-        total_tests++;
+//         int result4 = hmacsha_compute(hmac_shactrl, SHA256, key4, msg4, 400, mac4);
+//         total_tests++;
         
-        printf("Result: %s\n", result4 == 0 ? "SUCCESS" : "FAILED");
-        if (result4 == 0) {
-            // printf("Computed MAC: ");
-            // for (int i = 0; i < 8; i++) {
-            //     printf("%08x", (uint32_t)(mac4[i] & 0xFFFFFFFF));
-            // }
-            printf("\n");
-            printf("Expected MAC: 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b\n");
-            print_mac_as_hex_string(mac4, "Computed MAC");
+//         printf("Result: %s\n", result4 == 0 ? "SUCCESS" : "FAILED");
+//         if (result4 == 0) {
+//             // printf("Computed MAC: ");
+//             // for (int i = 0; i < 8; i++) {
+//             //     printf("%08x", (uint32_t)(mac4[i] & 0xFFFFFFFF));
+//             // }
+//             printf("\n");
+//             printf("Expected MAC: 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b\n");
+//             print_mac_as_hex_string(mac4, "Computed MAC");
             
-            /* Check if result matches expected */
-            int match = 1;
-            for (int i = 0; i < 8; i++) {
-                if (mac4[i] != expected4[i]) {
-                    match = 0;
-                    break;
-                }
-            }
-            printf("Test Case 4: %s\n", match ? "PASS " : "FAIL");
-            if (match) passed_tests++;
-        }
-    }
+//             /* Check if result matches expected */
+//             int match = 1;
+//             for (int i = 0; i < 8; i++) {
+//                 if (mac4[i] != expected4[i]) {
+//                     match = 0;
+//                     break;
+//                 }
+//             }
+//             printf("Test Case 4: %s\n", match ? "PASS " : "FAIL");
+//             if (match) passed_tests++;
+//         }
+//     }
     
     
-    /* Summary */
-    printf("\n=== RFC 4231 Test Summary ===\n");
-    printf("Total tests: %d\n", total_tests);
-    printf("Passed tests: %d\n", passed_tests);
-    printf("Failed tests: %d\n", total_tests - passed_tests);
+//     /* Summary */
+//     printf("\n=== RFC 4231 Test Summary ===\n");
+//     printf("Total tests: %d\n", total_tests);
+//     printf("Passed tests: %d\n", passed_tests);
+//     printf("Failed tests: %d\n", total_tests - passed_tests);
     
-    if (passed_tests == total_tests) {
-        printf("ALL RFC 4231 TESTS PASSED!\n");
-    } else {
-        printf("SOME TESTS FAILED\n");
-    }
-}
+//     if (passed_tests == total_tests) {
+//         printf("ALL RFC 4231 TESTS PASSED!\n");
+//     } else {
+//         printf("SOME TESTS FAILED\n");
+//     }
+// }
 // /* Test case simulating HKDF Expand with 65-byte message */
 // void hwhmacsha_test_hkdf_expand_65bytes(void *hmac_shactrl)
 // {
@@ -688,55 +688,55 @@ void test_hmacsha_compute_rfc4231(void *hmac_shactrl)
 //     }
 // }
 
-void hwhmacsha_selftest(void *hmac_shactrl)
-{
+// void hwhmacsha_selftest(void *hmac_shactrl)
+// {
 
-      //=================== test hmac_sha_256 ===========================
-    // printf("HMAC-SHA 256: \n\r");
-    // uint32_t ref256[8] =    {0x507ed7ce, 0x53a9c1c2, 0x080f8996, 0x20fd0f59, 0x0c736a54, 0x727fa0ca, 0x1e80df27, 0x377c3939};
-    uint64_t msg256[16] =   {0x000000000b0b0b0b, 0x000000000b0b0b0b, 0x000000000b0b0b0b, 0x000000000b0b0b0b, // Hoc vien ky thuat mat ma.
-                             0x000000000b0b0b0b, 0x000000000b0b0000, 0x0000000000000000, 0x0000000000000000,
-                             0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
-                             0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000
-                            };
-    uint64_t key256[8] = {0x0000000000010203,0x0000000004050607,0x0000000008090a0b,0x000000000c000000,0,0,0,0};
-    uint64_t mac256[8];
-    uint64_t msj_len256[2] = {0, 176};
+//       //=================== test hmac_sha_256 ===========================
+//     // printf("HMAC-SHA 256: \n\r");
+//     // uint32_t ref256[8] =    {0x507ed7ce, 0x53a9c1c2, 0x080f8996, 0x20fd0f59, 0x0c736a54, 0x727fa0ca, 0x1e80df27, 0x377c3939};
+//     uint64_t msg256[16] =   {0x000000000b0b0b0b, 0x000000000b0b0b0b, 0x000000000b0b0b0b, 0x000000000b0b0b0b, // Hoc vien ky thuat mat ma.
+//                              0x000000000b0b0b0b, 0x000000000b0b0000, 0x0000000000000000, 0x0000000000000000,
+//                              0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
+//                              0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000
+//                             };
+//     uint64_t key256[8] = {0x0000000000010203,0x0000000004050607,0x0000000008090a0b,0x000000000c000000,0,0,0,0};
+//     uint64_t mac256[8];
+//     uint64_t msj_len256[2] = {0, 176};
     
-    // int key_size = 0;      /* 4 bytes effective key size */
-    int msg_size = 176;    /* 176 bits message size */
+//     // int key_size = 0;      /* 4 bytes effective key size */
+//     int msg_size = 176;    /* 176 bits message size */
 
-    int cnt = 0;
+//     int cnt = 0;
     
-//     for (int i = 0; i < 8; i++) {
-//        printf("msg256[%d] = 0x%016llx\n", i, msg256[i]);
-//    }
-        /* Call unified HMAC-SHA function */
-    int result = hmacsha_compute(hmac_shactrl, 
-                               SHA256,           /* Hash type */
-                               key256,           /* Key */
-                            //    key_size,         /* Key size in bytes */
-                               msg256,           /* Message */
-                               msg_size,         /* Message size in bits */
-                               mac256);          /* Output MAC */
+// //     for (int i = 0; i < 8; i++) {
+// //        printf("msg256[%d] = 0x%016llx\n", i, msg256[i]);
+// //    }
+//         /* Call unified HMAC-SHA function */
+//     int result = hmacsha_compute(hmac_shactrl, 
+//                                SHA256,           /* Hash type */
+//                                key256,           /* Key */
+//                             //    key_size,         /* Key size in bytes */
+//                                msg256,           /* Message */
+//                                msg_size,         /* Message size in bits */
+//                                mac256);          /* Output MAC */
     
-    /* Check result and display output */
-    if (result == 0) {
-        printf("\n✅ HMAC computation successful!\n");
-        printf("MAC256 result:\n");
-        for (int i = 0; i < 8; i++) {
-            printf("  mac256[%d] = 0x%016llx\n", i, mac256[i]);
-        }
+//     /* Check result and display output */
+//     if (result == 0) {
+//         printf("\n✅ HMAC computation successful!\n");
+//         printf("MAC256 result:\n");
+//         for (int i = 0; i < 8; i++) {
+//             printf("  mac256[%d] = 0x%016llx\n", i, mac256[i]);
+//         }
         
-        /* Print as continuous hex string for verification */
-        printf("\nMAC as hex string: ");
-        for (int i = 0; i < 8; i++) {
-            printf("%016llx", mac256[i]);
-        }
-        printf("\n");
-    } else {
-        printf("\n❌ HMAC computation failed with error: %d\n", result);
-    }
+//         /* Print as continuous hex string for verification */
+//         printf("\nMAC as hex string: ");
+//         for (int i = 0; i < 8; i++) {
+//             printf("%016llx", mac256[i]);
+//         }
+//         printf("\n");
+//     } else {
+//         printf("\n❌ HMAC computation failed with error: %d\n", result);
+//     }
 
 //     hmacsha_reset(hmac_shactrl);
 //     hmacsha_set_length(hmac_shactrl, msj_len256);
@@ -818,7 +818,7 @@ void hwhmacsha_selftest(void *hmac_shactrl)
 //    }
 
 
-}
+// }
 
 // /* RFC 4231 Test Vectors for HMAC-SHA256 */
 // void hwhmacsha_rfc4231_tests(void *hmac_shactrl)

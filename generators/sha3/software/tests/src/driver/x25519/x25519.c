@@ -53,14 +53,14 @@ void hwx25519_results(void* x25519ctrl, uint64_t* result) {
     _REG32((char*)x25519ctrl, X25519_REG_CONTROL) = 0x00;
 }
 
-void print_x25519_value(const char* label, uint64_t* value) {
-    printf("%s", label);
-    // Print in natural order since result array is already correctly ordered
-    for(int i = 0; i < 4; i++) {
-        printf("%016lx", value[i]);
-    }
-    printf("\n");
-}
+// void print_x25519_value(const char* label, uint64_t* value) {
+//     printf("%s", label);
+//     // Print in natural order since result array is already correctly ordered
+//     for(int i = 0; i < 4; i++) {
+//         printf("%016lx", value[i]);
+//     }
+//     printf("\n");
+// }
 
 // Accurate timing measurement macro
 #define START_TIMING() \
@@ -95,123 +95,123 @@ void generate_address_key(uint64_t* key) {
     }
 }
 
-void hwx25519_selftest(void* x25519ctrl) {
-    printf("X25519 ECDH Protocol Test (RFC 7748)\n");
-    printf("====================================\n\n");
-    unsigned long start, end;
-    // Private keys
-//    uint64_t alice_private[4];
-//    uint64_t bob_private[4];
-//    generate_address_key(alice_private);
-//    generate_address_key(bob_private);
+// void hwx25519_selftest(void* x25519ctrl) {
+//     printf("X25519 ECDH Protocol Test (RFC 7748)\n");
+//     printf("====================================\n\n");
+//     unsigned long start, end;
+//     // Private keys
+// //    uint64_t alice_private[4];
+// //    uint64_t bob_private[4];
+// //    generate_address_key(alice_private);
+// //    generate_address_key(bob_private);
 
-    uint64_t alice_private[4] = {
-        0x00c9a7a05a86e349ULL,
-        0x3723b76b016f39c4ULL,
-        0x117409f0f934ab05ULL,
-        0x608f0e1e23bb7d75ULL
-    };
+//     uint64_t alice_private[4] = {
+//         0x00c9a7a05a86e349ULL,
+//         0x3723b76b016f39c4ULL,
+//         0x117409f0f934ab05ULL,
+//         0x608f0e1e23bb7d75ULL
+//     };
 
-    uint64_t bob_private[4] = {
-        0x5625b841a21c0000ULL,
-        0x32b956a8512af35fULL,
-        0xe26832a35bcc2932ULL,
-        0xf56b9fcf4418f6e9ULL
-    };
+//     uint64_t bob_private[4] = {
+//         0x5625b841a21c0000ULL,
+//         0x32b956a8512af35fULL,
+//         0xe26832a35bcc2932ULL,
+//         0xf56b9fcf4418f6e9ULL
+//     };
 
-    uint64_t base_point[4] = {
-        0x0900000000000000ULL,
-        0x0000000000000000ULL,
-        0x0000000000000000ULL,
-        0x0000000000000000ULL
-    };
+//     uint64_t base_point[4] = {
+//         0x0900000000000000ULL,
+//         0x0000000000000000ULL,
+//         0x0000000000000000ULL,
+//         0x0000000000000000ULL
+//     };
 
-    uint64_t alice_public[4];
-    uint64_t bob_public[4];
-    uint64_t alice_shared[4];
-    uint64_t bob_shared[4];
+//     uint64_t alice_public[4];
+//     uint64_t bob_public[4];
+//     uint64_t alice_shared[4];
+//     uint64_t bob_shared[4];
 
-//    printf("=== Step 1: Alice computes K_A = X25519(a, 9) ===\n");
-    print_x25519_value("Alice's private key 'a': ", alice_private);
+// //    printf("=== Step 1: Alice computes K_A = X25519(a, 9) ===\n");
+//     print_x25519_value("Alice's private key 'a': ", alice_private);
 
-    START_TIMING();
-    hwx25519_init(x25519ctrl, alice_private, base_point);
-    hwx25519_results(x25519ctrl, alice_public);
-    END_TIMING();
-    printf("Step 1: %lu cycles\n", end - start);
+//     START_TIMING();
+//     hwx25519_init(x25519ctrl, alice_private, base_point);
+//     hwx25519_results(x25519ctrl, alice_public);
+//     END_TIMING();
+//     printf("Step 1: %lu cycles\n", end - start);
 
-//    print_x25519_value("Alice's public key K_A:  ", alice_public);
-//    printf("\n");
+// //    print_x25519_value("Alice's public key K_A:  ", alice_public);
+// //    printf("\n");
 
-//    printf("=== Step 2: Bob computes K_B = X25519(b, 9) ===\n");
-    print_x25519_value("Bob's private key 'b':   ", bob_private);
-    START_TIMING();
-    hwx25519_init(x25519ctrl, bob_private, base_point);
-    hwx25519_results(x25519ctrl, bob_public);
-    END_TIMING();
-    printf("Step 2: %lu cycles\n", end - start);
+// //    printf("=== Step 2: Bob computes K_B = X25519(b, 9) ===\n");
+//     print_x25519_value("Bob's private key 'b':   ", bob_private);
+//     START_TIMING();
+//     hwx25519_init(x25519ctrl, bob_private, base_point);
+//     hwx25519_results(x25519ctrl, bob_public);
+//     END_TIMING();
+//     printf("Step 2: %lu cycles\n", end - start);
 
-//    print_x25519_value("Bob's public key K_B:    ", bob_public);
-//    printf("\n");
+// //    print_x25519_value("Bob's public key K_B:    ", bob_public);
+// //    printf("\n");
 
-//    printf("=== Step 3: Alice computes shared secret X25519(a, K_B) ===\n");
-//    print_x25519_value("Alice's private key 'a': ", alice_private);
-//    print_x25519_value("Bob's public key K_B:    ", bob_public);
-    START_TIMING();
-    hwx25519_init(x25519ctrl, alice_private, bob_public);
-    hwx25519_results(x25519ctrl, alice_shared);
-    END_TIMING();
-    printf("Step 3: %lu cycles\n", end - start);
-//    print_x25519_value("Alice's shared secret:   ", alice_shared);
-//    printf("\n");
+// //    printf("=== Step 3: Alice computes shared secret X25519(a, K_B) ===\n");
+// //    print_x25519_value("Alice's private key 'a': ", alice_private);
+// //    print_x25519_value("Bob's public key K_B:    ", bob_public);
+//     START_TIMING();
+//     hwx25519_init(x25519ctrl, alice_private, bob_public);
+//     hwx25519_results(x25519ctrl, alice_shared);
+//     END_TIMING();
+//     printf("Step 3: %lu cycles\n", end - start);
+// //    print_x25519_value("Alice's shared secret:   ", alice_shared);
+// //    printf("\n");
 
-//    printf("=== Step 4: Bob computes shared secret X25519(b, K_A) ===\n");
-//    print_x25519_value("Bob's private key 'b':   ", bob_private);
-//    print_x25519_value("Alice's public key K_A:  ", alice_public);
-    START_TIMING();
-    hwx25519_init(x25519ctrl, bob_private, alice_public);
-    hwx25519_results(x25519ctrl, bob_shared);
-    END_TIMING();
-    printf("Step 4: %lu cycles\n", end - start);
+// //    printf("=== Step 4: Bob computes shared secret X25519(b, K_A) ===\n");
+// //    print_x25519_value("Bob's private key 'b':   ", bob_private);
+// //    print_x25519_value("Alice's public key K_A:  ", alice_public);
+//     START_TIMING();
+//     hwx25519_init(x25519ctrl, bob_private, alice_public);
+//     hwx25519_results(x25519ctrl, bob_shared);
+//     END_TIMING();
+//     printf("Step 4: %lu cycles\n", end - start);
 
-//    print_x25519_value("Bob's shared secret:     ", bob_shared);
-//    printf("\n");
+// //    print_x25519_value("Bob's shared secret:     ", bob_shared);
+// //    printf("\n");
 
-//    printf("=== Step 5: Verify shared secrets match ===\n");
-//    print_x25519_value("Alice's shared secret: ", alice_shared);
-//    print_x25519_value("Bob's shared secret:   ", bob_shared);
+// //    printf("=== Step 5: Verify shared secrets match ===\n");
+// //    print_x25519_value("Alice's shared secret: ", alice_shared);
+// //    print_x25519_value("Bob's shared secret:   ", bob_shared);
 
-    if(alice_shared[0] == bob_shared[0] &&
-       alice_shared[1] == bob_shared[1] &&
-       alice_shared[2] == bob_shared[2] &&
-       alice_shared[3] == bob_shared[3]) {
-        printf("✓ SUCCESS: Shared secrets match!\n");
-    } else {
-        printf("✗ FAILURE: Shared secrets don't match!\n");
-        printf("=== Step 1: Alice computes K_A = X25519(a, 9) ===\n");
-        print_x25519_value("Alice's private key 'a': ", alice_private);
-        print_x25519_value("Alice's public key K_A:  ", alice_public);
-        printf("\n");
+//     if(alice_shared[0] == bob_shared[0] &&
+//        alice_shared[1] == bob_shared[1] &&
+//        alice_shared[2] == bob_shared[2] &&
+//        alice_shared[3] == bob_shared[3]) {
+//         printf("✓ SUCCESS: Shared secrets match!\n");
+//     } else {
+//         printf("✗ FAILURE: Shared secrets don't match!\n");
+//         printf("=== Step 1: Alice computes K_A = X25519(a, 9) ===\n");
+//         print_x25519_value("Alice's private key 'a': ", alice_private);
+//         print_x25519_value("Alice's public key K_A:  ", alice_public);
+//         printf("\n");
 
-        printf("=== Step 2: Bob computes K_B = X25519(b, 9) ===\n");
-        print_x25519_value("Bob's private key 'b':   ", bob_private);
-        print_x25519_value("Bob's public key K_B:    ", bob_public);
-        printf("\n");
+//         printf("=== Step 2: Bob computes K_B = X25519(b, 9) ===\n");
+//         print_x25519_value("Bob's private key 'b':   ", bob_private);
+//         print_x25519_value("Bob's public key K_B:    ", bob_public);
+//         printf("\n");
 
-        printf("=== Step 3: Alice computes shared secret X25519(a, K_B) ===\n");
-        print_x25519_value("Alice's private key 'a': ", alice_private);
-        print_x25519_value("Bob's public key K_B:    ", bob_public);
-        print_x25519_value("Alice's shared secret:   ", alice_shared);
-        printf("\n");
+//         printf("=== Step 3: Alice computes shared secret X25519(a, K_B) ===\n");
+//         print_x25519_value("Alice's private key 'a': ", alice_private);
+//         print_x25519_value("Bob's public key K_B:    ", bob_public);
+//         print_x25519_value("Alice's shared secret:   ", alice_shared);
+//         printf("\n");
 
-        printf("=== Step 4: Bob computes shared secret X25519(b, K_A) ===\n");
-        print_x25519_value("Bob's private key 'b':   ", bob_private);
-        print_x25519_value("Alice's public key K_A:  ", alice_public);
-        print_x25519_value("Bob's shared secret:     ", bob_shared);
-        printf("\n");
+//         printf("=== Step 4: Bob computes shared secret X25519(b, K_A) ===\n");
+//         print_x25519_value("Bob's private key 'b':   ", bob_private);
+//         print_x25519_value("Alice's public key K_A:  ", alice_public);
+//         print_x25519_value("Bob's shared secret:     ", bob_shared);
+//         printf("\n");
 
-        printf("=== Step 5: Verify shared secrets match ===\n");
-        print_x25519_value("Alice's shared secret: ", alice_shared);
-        print_x25519_value("Bob's shared secret:   ", bob_shared);
-    }
-}
+//         printf("=== Step 5: Verify shared secrets match ===\n");
+//         print_x25519_value("Alice's shared secret: ", alice_shared);
+//         print_x25519_value("Bob's shared secret:   ", bob_shared);
+//     }
+// }

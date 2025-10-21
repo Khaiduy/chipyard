@@ -5,14 +5,12 @@
 /* Enable user settings */
 #define WOLFSSL_USER_SETTINGS
 
-/* Basic wolfSSL settings for your configuration */
+/* Minimal wolfSSL settings for HPKE + ASCON */
 #define WOLFSSL_EXPERIMENTAL_SETTINGS
 #define WOLFSSL_ASCON_AEAD
+#define HAVE_ASCON
 #define WOLFSSL_HAVE_HPKE
-#define HAVE_KYBER
-#define HAVE_DILITHIUM
 #define HAVE_AEAD
-#define WOLFSSL_PSK
 #define WOLFSSL_NO_FILESYSTEM
 #define WOLFSSL_NO_STDIO
 #define WOLFSSL_NO_DEV_RANDOM
@@ -28,20 +26,12 @@
 #define HAVE_HMAC
 #define HAVE_ECC
 #define HAVE_ECDH
-#define HAVE_ECC_ENCRYPT
-#define WOLFSSL_SHA256
-#define WOLFSSL_SHA384
-#define WOLFSSL_SHA512
-#define WOLFSSL_SHA3
-#define HAVE_CURVE25519
-#define HAVE_CURVE448
-#define HAVE_ECC_SECP256R1
-#define HAVE_ECC_SECP384R1
-#define HAVE_ECC_SECP521R1
+#define WOLFSSL_SHA256              // Only SHA256
+#define HAVE_CURVE25519             // Only Curve25519
+#define HAVE_ECC_SECP256R1          // Only secp256r1
 #define WOLFSSL_SP_MATH
 #define WOLFSSL_HAVE_SP_ECC
 #define WOLFSSL_SP_MATH_ECC
-#define WOLFSSL_HAVE_SP_RSA
 #define WOLFSSL_NO_SIGNAL
 #define NO_DEV_RANDOM
 
@@ -52,7 +42,7 @@
 #define ECC_TIMING_RESISTANT
 #define WC_RSA_BLINDING
 
-/* Disable unused features to save space */
+/* ===== SIZE OPTIMIZATION: Disable unused features ===== */
 #define NO_DES3
 #define NO_DSA
 #define NO_RC4
@@ -60,28 +50,41 @@
 #define NO_MD5
 #define NO_PWDBASED
 #define NO_OLD_TLS
+#define NO_RSA                      // Remove RSA entirely
+#define NO_DH                       // Remove Diffie-Hellman
+#define WOLFSSL_NO_ASN              // Disable ASN.1 parsing  
+#define NO_CERTS                    // Disable certificate support
+#define NO_SESSION_CACHE            // Disable TLS session cache
+#define WOLFSSL_SP_SMALL            // Use smaller SP math
+#define NO_CODING                   // Disable base64/hex encoding
+#define NO_INLINE                   // Disable function inlining
 
-/* ------------------------------------------------------------------------- */
+/* Remove unused crypto algorithms */
+#define NO_AES_192                  // Only AES-128 and AES-256
+#define NO_AES_CBC                  // Only GCM mode
+#define NO_AES_CFB
+#define NO_AES_OFB
+#define NO_CHACHA
+#define NO_POLY1305
+
+/* Remove unused ECC curves */
+#define NO_ECC_DHE
+#define NO_ECC_SIGN
+#define NO_ECC_VERIFY
+
+/* Remove post-quantum and advanced features */
+#define NO_PSK
+#define NO_ERROR_STRINGS            // Remove error string messages
+
+/* Reduce static memory */
+#define WOLFSSL_STATIC_MEM_SIZE 16384  // Reduce from 65536 to 16KB
+
 /* RNG Configuration */
-/* ------------------------------------------------------------------------- */
-#if 0
-    /* Option 1: Bypass P-RNG and use only HW RNG */
-    #define CUSTOM_RAND_TYPE      unsigned int
-    extern int my_rng_gen_block(unsigned char* output, unsigned int sz);
-    #undef  CUSTOM_RAND_GENERATE_BLOCK
-    #define CUSTOM_RAND_GENERATE_BLOCK  my_rng_gen_block
-#else
-    /* Option 2: HASHDRBG with custom seed source (RECOMMENDED) */
-    #define HAVE_HASHDRBG
-    
-    /* Custom seed configuration */
-    #define CUSTOM_RAND_TYPE      unsigned int
-    extern unsigned int my_rng_seed_gen(void);
-    #undef  CUSTOM_RAND_GENERATE
-    #define CUSTOM_RAND_GENERATE  my_rng_seed_gen
-    
-    /* HASHDRBG configuration */
-    #define WC_RESEED_INTERVAL 10000  /* Reseed every 10000 requests */
-#endif
+#define HAVE_HASHDRBG
+#define CUSTOM_RAND_TYPE      unsigned int
+extern unsigned int my_rng_seed_gen(void);
+#undef  CUSTOM_RAND_GENERATE
+#define CUSTOM_RAND_GENERATE  my_rng_seed_gen
+#define WC_RESEED_INTERVAL 10000
 
 #endif /* WOLFSSL_USER_SETTINGS_H */

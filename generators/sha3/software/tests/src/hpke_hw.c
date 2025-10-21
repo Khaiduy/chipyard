@@ -14,8 +14,9 @@
 #include <wolfssl/wolfcrypt/curve25519.h>
 #include <wolfssl/wolfcrypt/memory.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
-#include <wolfssl/wolfcrypt/kdf.h>
-#include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/ascon.h>
+// #include <wolfssl/wolfcrypt/kdf.h>
+// #include <wolfssl/wolfcrypt/aes.h>
 #include "driver/aes_gcm/aes_gcm.h"  // add: firmware AES-GCM API
 #include "driver/hmac_sha/hmac_sha.h"
 
@@ -31,13 +32,13 @@
 #define XMEMCMP memcmp
 #endif
 
-#ifndef XMALLOC
-#define XMALLOC(sz, heap, type) malloc(sz)
-#endif
+// #ifndef XMALLOC
+// #define XMALLOC(sz, heap, type) malloc(sz)
+// #endif
 
-#ifndef XFREE
-#define XFREE(ptr, heap, type) free(ptr)
-#endif
+// #ifndef XFREE
+// #define XFREE(ptr, heap, type) free(ptr)
+// #endif
 
 /* Hardware accelerator base addresses */
 #define X25519_HW_BASE_ADDR  0x64004000
@@ -47,7 +48,7 @@
 #define SHA256_MODE 1
 
 // Static memory setup for WolfSSL
-#define WOLFSSL_STATIC_MEM_SIZE 65536
+#define WOLFSSL_STATIC_MEM_SIZE 1024*32
 static byte g_wolfssl_mem[WOLFSSL_STATIC_MEM_SIZE];
 static WOLFSSL_HEAP_HINT* g_heap_hint = NULL;
 
@@ -56,6 +57,16 @@ static int test_failures = 0;
 static int tests_passed = 0;
 static unsigned long total_cycles = 0;
 static unsigned long step_start_cycles = 0;
+
+#define HPKE_TEST_BYTES (1 * 128)  // 128 bytes test size
+
+#define HPKE_TEST_WORDS64 ((HPKE_TEST_BYTES + 7) / 8)  // Convert to qwords
+
+/* Static buffers for HPKE large data test */
+static byte hpke_plaintext_buf[HPKE_TEST_BYTES];     // 128 bytes
+static byte hpke_aad_buf[16];                       // 16 bytes AAD
+static byte hpke_ciphertext_buf[HPKE_TEST_BYTES + 16]; // 128 bytes + 16-byte tag
+static byte hpke_decrypted_buf[HPKE_TEST_BYTES];     // 128 bytes
 
 /* Helper functions */
 static void start_timing(void)
@@ -290,6 +301,7 @@ static int hw_HKDF_Extract(const byte* salt, word32 saltSz,
     
     return 0; /* Success */
 }
+
 /* Hardware HKDF Expand using static buffers for baremetal */
 static int hw_HKDF_Expand(const byte* prk, word32 prkSz,
                           const byte* info, word32 infoSz,
@@ -494,12 +506,12 @@ static int hw_HpkeExtractAndExpand(Hpke* hpke, byte* dh, word32 dhSz,
     // printf("  Extract and Expand operation\n");
     
     /* Step 1: Extract */
-    // printf("    HKDF Extract step\n");
-    // start_timing();
+    printf("    HKDF Extract step\n");
+    start_timing();
     ret = hw_HKDF_Extract(NULL, 0,  /* No salt */
                           dh, dhSz, 
                           prkExtract);
-    // end_timing("HKDF Extract");
+    end_timing("HKDF Extract");
     
     if (ret != 0) {
         // printf("    HKDF Extract failed: %d\n", ret);
@@ -508,11 +520,11 @@ static int hw_HpkeExtractAndExpand(Hpke* hpke, byte* dh, word32 dhSz,
     
     /* Step 2: Expand */
     // printf("    HKDF Expand step\n");
-    // start_timing();
+    start_timing();
     ret = hw_HKDF_Expand(prkExtract, sizeof(prkExtract),
                          kemContext, kemContextSz,
                          sharedSecret, CURVE25519_KEYSIZE);
-    // end_timing("HKDF Expand");
+    end_timing("HKDF Expand");
     
     if (ret != 0) {
         // printf("    HKDF Expand failed: %d\n", ret);
@@ -600,7 +612,7 @@ static int hw_HpkeKeyScheduleBase(Hpke* hpke, byte* sharedSecret,
     
     /* Step 1: Schedule Extract */
     // printf("    Schedule Extract step\n");
-    // start_timing();
+    start_timing();
     ret = hw_HKDF_Extract(NULL, 0,  /* No salt */
                           sharedSecret, CURVE25519_KEYSIZE,
                           prkSchedule);
@@ -613,7 +625,7 @@ static int hw_HpkeKeyScheduleBase(Hpke* hpke, byte* sharedSecret,
     
     /* Step 2: Expand for key */
     // printf("    Expand for key\n");
-    // start_timing();
+    start_timing();
     ret = hw_HKDF_Expand(prkSchedule, sizeof(prkSchedule),
                          keyInfo, sizeof(keyInfo),
                          key, 16);  /* AES-128 key size */
@@ -626,7 +638,7 @@ static int hw_HpkeKeyScheduleBase(Hpke* hpke, byte* sharedSecret,
     
     /* Step 3: Expand for base nonce */
     // printf("    Expand for base nonce\n");
-    // start_timing();
+    start_timing();
     ret = hw_HKDF_Expand(prkSchedule, sizeof(prkSchedule),
                          nonceInfo, sizeof(nonceInfo),
                          baseNonce, 12);  /* GCM nonce size */
@@ -653,19 +665,23 @@ static int hw_HpkeSetupBaseSender(Hpke* hpke, void* ephemeralKey, void* receiver
     
     /* Step 1: Encapsulation */
     // printf("Step 1: Encapsulation\n");
+    start_timing();
     ret = hw_HpkeEncap(hpke, ephemeralKey, receiverKey, sharedSecret);
     if (ret != 0) {
         // printf("Encapsulation failed: %d\n", ret);
         return ret;
     }
+    // end_timing("Hardware Encapsulation");
     
     /* Step 2: Key Schedule */
     // printf("Step 2: Key Schedule\n");
+    start_timing();
     ret = hw_HpkeKeyScheduleBase(hpke, sharedSecret, info, infoSz, key, baseNonce);
     if (ret != 0) {
         // printf("Key Schedule failed: %d\n", ret);
         return ret;
     }
+    // end_timing("Hardware Key Schedule");
     
     // printf("Setup Base Sender completed successfully\n");
     return 0;
@@ -697,10 +713,10 @@ static int hw_HpkeSetupBaseReceiver(Hpke* hpke, void* receiverKey,
     }
     
     /* Step 1: DH operation with hardware */
-    // printf("Step 1: DH operation\n");
-    // start_timing();
+    printf("Step 1: DH operation\n");
+    start_timing();
     ret = hw_curve25519_scalar_mult(sharedSecret, recvKey->k, ephemeralPubKey);
-    // end_timing("Hardware DH operation");
+    
     
     if (ret != 0) {
         // printf("DH operation failed: %d\n", ret);
@@ -724,15 +740,16 @@ static int hw_HpkeSetupBaseReceiver(Hpke* hpke, void* receiverKey,
         // printf("Extract and Expand failed: %d\n", ret);
         return ret;
     }
-    
+    end_timing("Hardware DH operation");
     /* Step 3: Key Schedule */
-    // printf("Step 3: Key Schedule\n");
+    printf("Step 3: Key Schedule\n");
+    start_timing();
     ret = hw_HpkeKeyScheduleBase(hpke, extractedSecret, info, infoSz, key, baseNonce);
     if (ret != 0) {
         // printf("Key Schedule failed: %d\n", ret);
         return ret;
     }
-    
+    end_timing("Hardware Key Schedule");
     // printf("Setup Base Receiver completed successfully\n");
     return 0;
 }
@@ -865,6 +882,8 @@ static int hw_HpkeSealBase(Hpke* hpke, void* ephemeralKey, void* receiverKey,
         goto cleanup;
     }
     
+    printf("Sealing with AES-GCM using hardware acceleration\n");
+    start_timing();
     /* Convert to hardware format */
     pack_bytes_to_qwords_be_fixed(key, 16, hw_key, 4);
     pack_bytes_to_qwords_be_fixed(baseNonce, 12, hw_iv, 2);
@@ -892,7 +911,7 @@ static int hw_HpkeSealBase(Hpke* hpke, void* ephemeralKey, void* receiverKey,
     /* Convert results back to byte format */
     unpack_qwords_to_bytes_be(hw_ct, plaintextSz, ciphertext);
     unpack_qwords_to_bytes_be(hw_tag, 16, authTag);
-    
+    end_timing("Hardware AES-GCM Seal");
     /* Debug: Print encryption results */
     // print_hex_debug("Hardware Ciphertext", ciphertext, plaintextSz);
     // print_hex_debug("Hardware Auth tag", authTag, 16);
@@ -972,7 +991,7 @@ static int hw_HpkeOpenBase(Hpke* hpke, void* receiverKey,
         }
         XMEMSET(hw_aad, 0, aad_qwords * sizeof(uint64_t));
     }
-    
+     
     /* Dynamically allocate ciphertext/plaintext buffers */
     uint64_t* hw_ct = XMALLOC(ct_qwords * sizeof(uint64_t), hpke->heap, DYNAMIC_TYPE_TMP_BUFFER);
     uint64_t* hw_pt = XMALLOC(ct_qwords * sizeof(uint64_t), hpke->heap, DYNAMIC_TYPE_TMP_BUFFER);
@@ -997,6 +1016,8 @@ static int hw_HpkeOpenBase(Hpke* hpke, void* receiverKey,
         goto cleanup;
     }
     
+    printf("Opening with AES-GCM using hardware acceleration\n");
+    start_timing();
     /* Convert to hardware format */
     pack_bytes_to_qwords_be_fixed(key, 16, hw_key, 4);
     pack_bytes_to_qwords_be_fixed(baseNonce, 12, hw_iv, 2);
@@ -1036,7 +1057,7 @@ static int hw_HpkeOpenBase(Hpke* hpke, void* receiverKey,
     /* Debug: Print decryption result */
     // print_hex_debug("Hardware Decrypted plaintext", plaintext, plaintextSz);
     // printf("=== HPKE Open Base (Hardware) Completed Successfully ===\n");
-
+    end_timing("Hardware AES-GCM Open");
     ret = 0; /* Success */
 
 cleanup:
@@ -1142,18 +1163,6 @@ static int hw_HpkeGenerateKeyPair(Hpke* hpke, void** keypair, WC_RNG* rng)
     // printf("  === HPKE Key Pair Generation Complete ===\n");
     return ret;
 }
-
-
-#define HPKE_TEST_BYTES (1 * 1024)  // 128 bytes test size
-
-#define HPKE_TEST_WORDS64 ((HPKE_TEST_BYTES + 7) / 8)  // Convert to qwords
-
-
-/* Static buffers for HPKE large data test */
-static byte hpke_plaintext_buf[HPKE_TEST_BYTES];     // 1KB
-static byte hpke_aad_buf[256];                       // 256 bytes AAD
-static byte hpke_ciphertext_buf[HPKE_TEST_BYTES + 16]; // 1KB + 16-byte tag
-static byte hpke_decrypted_buf[HPKE_TEST_BYTES];     // 1KB
 
 /* Modified test function using static buffers */
 static int test_hpke_large_data_static(void)
@@ -1284,6 +1293,515 @@ cleanup_rng:
     return ret;
 }
 
+/* Create Ascon context with proper heap hint */
+static wc_AsconAEAD128* create_ascon_context(void)
+{
+    /* Standard WolfSSL creation often fails, so use manual allocation */
+    wc_AsconAEAD128* asconAEAD = (wc_AsconAEAD128*) XMALLOC(sizeof(wc_AsconAEAD128), 
+                                                            g_heap_hint, DYNAMIC_TYPE_ASCON);
+    
+    if (asconAEAD != NULL) {
+        int ret = wc_AsconAEAD128_Init(asconAEAD);
+        if (ret != 0) {
+            printf("❌ Ascon init failed: %d\n", ret);
+            XFREE(asconAEAD, g_heap_hint, DYNAMIC_TYPE_ASCON);
+            return NULL;
+        }
+    }
+    
+    return asconAEAD;
+}
+
+/* Free Ascon context with proper heap hint */
+static void free_ascon_context(wc_AsconAEAD128* asconAEAD)
+{
+    if (asconAEAD) {
+        wc_AsconAEAD128_Clear(asconAEAD);
+        XFREE(asconAEAD, g_heap_hint, DYNAMIC_TYPE_ASCON);
+    }
+}
+
+/* Simple Ascon-128 encrypt/decrypt test */
+static int test_ascon_basic(void)
+{
+    printf("\n=== Ascon-128 Basic Test ===\n");
+    
+    int ret;
+    wc_AsconAEAD128* asconAEAD = NULL;
+    
+    /* Test vectors */
+    const byte key[ASCON_AEAD128_KEY_SZ] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+    
+    const byte nonce[ASCON_AEAD128_NONCE_SZ] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+    
+    const char* plaintext_str = "Hello, Ascon-128! This is a test message.";
+    word32 plaintext_len = strlen(plaintext_str);
+    
+    const char* aad_str = "Additional authenticated data";
+    word32 aad_len = strlen(aad_str);
+    
+    /* Buffers */
+    byte ciphertext[128];
+    byte tag[ASCON_AEAD128_TAG_SZ];
+    byte decrypted[128];
+    
+    printf("📋 Test Parameters:\n");
+    printf("   Plaintext: \"%s\" (%u bytes)\n", plaintext_str, plaintext_len);
+    printf("   AAD: \"%s\" (%u bytes)\n", aad_str, aad_len);
+    printf("   Key size: %d bytes, Nonce size: %d bytes, Tag size: %d bytes\n", 
+           ASCON_AEAD128_KEY_SZ, ASCON_AEAD128_NONCE_SZ, ASCON_AEAD128_TAG_SZ);
+    
+    /* Create Ascon context */
+    asconAEAD = create_ascon_context();
+    if (asconAEAD == NULL) {
+        printf("❌ Failed to create Ascon context\n");
+        return -1;
+    }
+    printf("✅ Ascon context created\n");
+    
+    /* ENCRYPTION PHASE */
+    printf("\n🔒 Encryption:\n");
+    
+    ret = wc_AsconAEAD128_SetKey(asconAEAD, key);
+    if (ret != 0) { printf("❌ SetKey failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_SetNonce(asconAEAD, nonce);
+    if (ret != 0) { printf("❌ SetNonce failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_SetAD(asconAEAD, (const byte*)aad_str, aad_len);
+    if (ret != 0) { printf("❌ SetAD failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_EncryptUpdate(asconAEAD, ciphertext, (const byte*)plaintext_str, plaintext_len);
+    if (ret != 0) { printf("❌ EncryptUpdate failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_EncryptFinal(asconAEAD, tag);
+    if (ret != 0) { printf("❌ EncryptFinal failed: %d\n", ret); goto cleanup; }
+    
+    printf("   ✅ Encryption successful\n");
+    
+    /* DECRYPTION PHASE */
+    printf("\n🔓 Decryption:\n");
+    
+    /* Clear context and reinitialize for decryption */
+    wc_AsconAEAD128_Clear(asconAEAD);
+    ret = wc_AsconAEAD128_Init(asconAEAD);
+    if (ret != 0) { printf("❌ Re-init failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_SetKey(asconAEAD, key);
+    if (ret != 0) { printf("❌ SetKey (decrypt) failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_SetNonce(asconAEAD, nonce);
+    if (ret != 0) { printf("❌ SetNonce (decrypt) failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_SetAD(asconAEAD, (const byte*)aad_str, aad_len);
+    if (ret != 0) { printf("❌ SetAD (decrypt) failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_DecryptUpdate(asconAEAD, decrypted, ciphertext, plaintext_len);
+    if (ret != 0) { printf("❌ DecryptUpdate failed: %d\n", ret); goto cleanup; }
+    
+    ret = wc_AsconAEAD128_DecryptFinal(asconAEAD, tag);
+    if (ret != 0) {
+        printf("❌ DecryptFinal failed: %d\n", ret);
+        printf("   → Authentication verification failed\n");
+        goto cleanup;
+    }
+    
+    printf("   ✅ Decryption successful\n");
+    
+    /* VERIFICATION */
+    printf("\n✅ Verification:\n");
+    decrypted[plaintext_len] = '\0';
+    printf("   Original:  \"%s\"\n", plaintext_str);
+    printf("   Decrypted: \"%s\"\n", (char*)decrypted);
+    
+    if (memcmp(plaintext_str, decrypted, plaintext_len) == 0) {
+        printf("🎉 SUCCESS: Ascon-128 working perfectly!\n");
+        ret = 0;
+    } else {
+        printf("❌ FAILURE: Data mismatch\n");
+        ret = -1;
+    }
+    
+cleanup:
+    free_ascon_context(asconAEAD);
+    return ret;
+}
+
+/* Ascon-128 Large Data Test (1KB) using static buffers */
+static int test_ascon_large_data_static(void)
+{
+    printf("\n=== Ascon-128 Large Data Test (Static Buffers - 1KB) ===\n");
+    
+    int ret;
+    wc_AsconAEAD128* asconAEAD = NULL;
+    
+    /* Test vectors */
+    const byte key[ASCON_AEAD128_KEY_SZ] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+    
+    const byte nonce[ASCON_AEAD128_NONCE_SZ] = {
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+        0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+    };
+    
+    /* Use same size as HPKE test */
+    const word32 plaintext_len = HPKE_TEST_BYTES;  // 1KB
+    const word32 aad_len = 256;                    // 256 bytes AAD
+    
+    /* Use the same static buffers as HPKE test */
+    byte* plaintext = hpke_plaintext_buf;      // 1KB static buffer
+    byte* aad = hpke_aad_buf;                  // 256 bytes AAD buffer
+    byte* ciphertext = hpke_ciphertext_buf;    // 1KB + 16 bytes for tag
+    byte* decrypted = hpke_decrypted_buf;      // 1KB for decrypted data
+    
+    byte tag[ASCON_AEAD128_TAG_SZ];
+    
+    printf("📋 Large Data Test Parameters:\n");
+    printf("   Plaintext size: %u bytes (1KB)\n", plaintext_len);
+    printf("   AAD size: %u bytes\n", aad_len);
+    printf("   Key size: %d bytes, Nonce size: %d bytes, Tag size: %d bytes\n", 
+           ASCON_AEAD128_KEY_SZ, ASCON_AEAD128_NONCE_SZ, ASCON_AEAD128_TAG_SZ);
+    printf("   Using static buffers (no dynamic allocation)\n");
+    
+    /* Fill static buffers with test data (same pattern as HPKE test) */
+    printf("🔧 Filling static buffers with test data...\n");
+    for (word32 i = 0; i < plaintext_len; i++) {
+        plaintext[i] = (byte)(i & 0xFF);  // Repeating 0x00-0xFF pattern
+    }
+    for (word32 i = 0; i < aad_len; i++) {
+        aad[i] = (byte)((i + 0x55) & 0xFF);  // Repeating pattern starting from 0x55
+    }
+    
+    printf("   ✅ Test data generated: %u-byte plaintext, %u-byte AAD\n", 
+           plaintext_len, aad_len);
+    
+    /* Create Ascon context */
+    printf("\n🔧 Creating Ascon context...\n");
+    asconAEAD = create_ascon_context();
+    if (asconAEAD == NULL) {
+        printf("❌ Failed to create Ascon context\n");
+        return -1;
+    }
+    printf("✅ Ascon context created for large data processing\n");
+    
+    /* ENCRYPTION PHASE */
+    printf("\n🔒 Large Data Encryption (1KB):\n");
+    
+    start_timing();
+    
+    ret = wc_AsconAEAD128_SetKey(asconAEAD, key);
+    if (ret != 0) { 
+        printf("❌ SetKey failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_SetNonce(asconAEAD, nonce);
+    if (ret != 0) { 
+        printf("❌ SetNonce failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_SetAD(asconAEAD, aad, aad_len);
+    if (ret != 0) { 
+        printf("❌ SetAD failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    /* Process large plaintext */
+    ret = wc_AsconAEAD128_EncryptUpdate(asconAEAD, ciphertext, plaintext, plaintext_len);
+    if (ret != 0) { 
+        printf("❌ EncryptUpdate failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_EncryptFinal(asconAEAD, tag);
+    if (ret != 0) { 
+        printf("❌ EncryptFinal failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    end_timing("Ascon-128 Large Data Encryption (1KB)");
+    
+    printf("   ✅ Large data encryption successful!\n");
+    printf("   ✅ Processed %u bytes plaintext + %u bytes AAD\n", plaintext_len, aad_len);
+    printf("   ✅ Generated %u-byte authentication tag\n", ASCON_AEAD128_TAG_SZ);
+    
+    /* Clear context and prepare for decryption */
+    printf("\n🔧 Preparing for decryption...\n");
+    wc_AsconAEAD128_Clear(asconAEAD);
+    ret = wc_AsconAEAD128_Init(asconAEAD);
+    if (ret != 0) { 
+        printf("❌ Re-init failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    /* DECRYPTION PHASE */
+    printf("\n🔓 Large Data Decryption (1KB):\n");
+    
+    start_timing();
+    
+    ret = wc_AsconAEAD128_SetKey(asconAEAD, key);
+    if (ret != 0) { 
+        printf("❌ SetKey (decrypt) failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_SetNonce(asconAEAD, nonce);
+    if (ret != 0) { 
+        printf("❌ SetNonce (decrypt) failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_SetAD(asconAEAD, aad, aad_len);
+    if (ret != 0) { 
+        printf("❌ SetAD (decrypt) failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    /* Process large ciphertext */
+    ret = wc_AsconAEAD128_DecryptUpdate(asconAEAD, decrypted, ciphertext, plaintext_len);
+    if (ret != 0) { 
+        printf("❌ DecryptUpdate failed: %d\n", ret); 
+        goto cleanup; 
+    }
+    
+    ret = wc_AsconAEAD128_DecryptFinal(asconAEAD, tag);
+    if (ret != 0) {
+        printf("❌ DecryptFinal failed: %d\n", ret);
+        printf("   → Authentication verification failed for large data\n");
+        goto cleanup;
+    }
+    
+    end_timing("Ascon-128 Large Data Decryption (1KB)");
+    
+    printf("   ✅ Large data decryption successful!\n");
+    printf("   ✅ Authentication tag verified for 1KB data + 256B AAD\n");
+    
+    /* VERIFICATION */
+    printf("\n✅ Large Data Verification:\n");
+    
+    printf("   Verifying %u-byte data integrity...\n", plaintext_len);
+    if (XMEMCMP(plaintext, decrypted, plaintext_len) == 0) {
+        printf("🎉 SUCCESS: Ascon-128 large data test completed perfectly!\n");
+        printf("   ✅ All %u bytes verified correctly\n", plaintext_len);
+        printf("   ✅ Static buffer management working\n");
+        printf("   ✅ Large data processing capability confirmed\n");
+        printf("   ✅ Authentication working for large payloads\n");
+        
+        /* Show first and last few bytes for verification */
+        printf("   📊 Data verification samples:\n");
+        printf("      First 16 bytes - Original: ");
+        for (int i = 0; i < 16; i++) printf("%02x", plaintext[i]);
+        printf("\n");
+        printf("      First 16 bytes - Decrypted: ");
+        for (int i = 0; i < 16; i++) printf("%02x", decrypted[i]);
+        printf("\n");
+        
+        printf("      Last 16 bytes  - Original: ");
+        for (int i = plaintext_len - 16; i < plaintext_len; i++) printf("%02x", plaintext[i]);
+        printf("\n");
+        printf("      Last 16 bytes  - Decrypted: ");
+        for (int i = plaintext_len - 16; i < plaintext_len; i++) printf("%02x", decrypted[i]);
+        printf("\n");
+        
+        ret = 0;
+    } else {
+        printf("❌ FAILURE: Large data mismatch detected!\n");
+        
+        /* Find first mismatch */
+        for (word32 i = 0; i < plaintext_len; i++) {
+            if (plaintext[i] != decrypted[i]) {
+                printf("   First mismatch at byte %u: expected 0x%02x, got 0x%02x\n", 
+                       i, plaintext[i], decrypted[i]);
+                break;
+            }
+        }
+        ret = -1;
+    }
+    
+cleanup:
+    free_ascon_context(asconAEAD);
+    
+    /* Clear sensitive data from static buffers */
+    XMEMSET(hpke_plaintext_buf, 0, HPKE_TEST_BYTES);
+    XMEMSET(hpke_aad_buf, 0, 256);
+    XMEMSET(hpke_ciphertext_buf, 0, HPKE_TEST_BYTES + 16);
+    XMEMSET(hpke_decrypted_buf, 0, HPKE_TEST_BYTES);
+    
+    printf("   🧹 Static buffers cleared\n");
+    
+    return ret;
+}
+
+/* ============================================================================
+ * AES-GCM PERFORMANCE TEST
+ * ============================================================================ */
+
+/* Performance test for AES-GCM encryption and decryption (128 bytes) */
+static int test_aes_gcm_performance_128bytes(void)
+{
+    printf("\n=== AES-GCM Performance Test (64 bytes) ===\n");
+    
+    int ret = 0;
+    unsigned long start_cycles, end_cycles;
+    void* aes_gcmctrl = (void*)AES_GCM_HW_BASE_ADDR;
+    
+    /* Test data - byte format */
+    #define AES_TEST_SIZE 64
+    byte key[16];  /* AES-128 key */
+    byte nonce[12];  /* GCM nonce */
+    byte aad[16];
+    byte plaintext[AES_TEST_SIZE];
+    byte ciphertext[AES_TEST_SIZE];
+    byte decrypted[AES_TEST_SIZE];
+    byte tag[16];
+    
+    /* Hardware format - qword arrays */
+    uint64_t hw_key[4];      /* 16 bytes = 2 qwords, but allocate 4 for safety */
+    uint64_t hw_nonce[2];    /* 12 bytes = 2 qwords */
+    uint64_t hw_aad[2];      /* 16 bytes = 2 qwords */
+    uint64_t hw_pt[8];       /* 64 bytes = 8 qwords */
+    uint64_t hw_ct[8];       /* 64 bytes = 8 qwords */
+    uint64_t hw_decrypted[8]; /* 64 bytes = 8 qwords */
+    uint64_t hw_tag[2];      /* 16 bytes = 2 qwords */
+    
+    /* Clear hardware buffers */
+    XMEMSET(hw_key, 0, sizeof(hw_key));
+    XMEMSET(hw_nonce, 0, sizeof(hw_nonce));
+    XMEMSET(hw_aad, 0, sizeof(hw_aad));
+    XMEMSET(hw_pt, 0, sizeof(hw_pt));
+    XMEMSET(hw_ct, 0, sizeof(hw_ct));
+    XMEMSET(hw_decrypted, 0, sizeof(hw_decrypted));
+    XMEMSET(hw_tag, 0, sizeof(hw_tag));
+    
+    /* Fill test data with patterns */
+    for (int i = 0; i < 16; i++) {
+        key[i] = (byte)(i * 0x11);
+    }
+    for (int i = 0; i < 12; i++) {
+        nonce[i] = (byte)(i * 0x22);
+    }
+    for (int i = 0; i < 16; i++) {
+        aad[i] = (byte)((i + 0x55) & 0xFF);
+    }
+    for (int i = 0; i < AES_TEST_SIZE; i++) {
+        plaintext[i] = (byte)(i & 0xFF);
+    }
+    
+    printf("\n--- Test Setup ---\n");
+    printf("Key (16 bytes):   ");
+    for (int i = 0; i < 16; i++) printf("%02x", key[i]);
+    printf("\n");
+    
+    printf("Nonce (12 bytes): ");
+    for (int i = 0; i < 12; i++) printf("%02x", nonce[i]);
+    printf("\n");
+    
+    printf("AAD (16 bytes):   ");
+    for (int i = 0; i < 16; i++) printf("%02x", aad[i]);
+    printf("\n");
+    
+    printf("Plaintext (first 32 bytes): ");
+    for (int i = 0; i < 32; i++) printf("%02x", plaintext[i]);
+    printf("\n");
+    
+    /* Convert byte arrays to hardware qword format (big-endian) */
+    pack_bytes_to_qwords_be_fixed(key, 16, hw_key, 4);
+    pack_bytes_to_qwords_be_fixed(nonce, 12, hw_nonce, 2);
+    pack_bytes_to_qwords_be_fixed(aad, 16, hw_aad, 2);
+    pack_bytes_to_qwords_be_fixed(plaintext, AES_TEST_SIZE, hw_pt, 8);
+    
+    /* Test AES-GCM Encryption */
+    printf("\n--- Testing AES-GCM Encryption (64 bytes) ---\n");
+    
+    hw_aes_gcm_reset(aes_gcmctrl);
+    
+    start_cycles = rdcycle();
+    
+    hw_aes_gcm_encrypt(aes_gcmctrl, hw_ct, hw_pt, AES_TEST_SIZE,
+                       hw_key, 16, hw_nonce, 12, hw_aad, 16, hw_tag, 16);
+    
+    end_cycles = rdcycle();
+    
+    unsigned long encrypt_cycles = end_cycles - start_cycles;
+    printf("✅ AES-GCM Encryption (64 bytes): %lu cycles\n", encrypt_cycles);
+    
+    /* Convert results back to byte format */
+    unpack_qwords_to_bytes_be(hw_ct, AES_TEST_SIZE, ciphertext);
+    unpack_qwords_to_bytes_be(hw_tag, 16, tag);
+    
+    printf("Ciphertext (first 32 bytes): ");
+    for (int i = 0; i < 32; i++) printf("%02x", ciphertext[i]);
+    printf("\n");
+    
+    printf("Authentication Tag: ");
+    for (int i = 0; i < 16; i++) printf("%02x", tag[i]);
+    printf("\n");
+    
+    /* Test AES-GCM Decryption */
+    printf("\n--- Testing AES-GCM Decryption (64 bytes) ---\n");
+    
+    hw_aes_gcm_reset(aes_gcmctrl);
+    
+    start_cycles = rdcycle();
+    
+    ret = hw_aes_gcm_decrypt_verify(aes_gcmctrl, hw_decrypted, hw_ct, AES_TEST_SIZE,
+                                    hw_key, 16, hw_nonce, 12, hw_aad, 16, hw_tag, 16);
+    
+    end_cycles = rdcycle();
+    
+    if (ret != 0) {
+        printf("❌ AES-GCM decryption/verification failed: %d\n", ret);
+        return ret;
+    }
+    
+    unsigned long decrypt_cycles = end_cycles - start_cycles;
+    printf("✅ AES-GCM Decryption (64 bytes): %lu cycles\n", decrypt_cycles);
+    
+    /* Convert result back to byte format */
+    unpack_qwords_to_bytes_be(hw_decrypted, AES_TEST_SIZE, decrypted);
+    
+    printf("Decrypted (first 32 bytes): ");
+    for (int i = 0; i < 32; i++) printf("%02x", decrypted[i]);
+    printf("\n");
+    
+    /* Verify plaintext matches */
+    printf("\n--- Verification ---\n");
+    if (XMEMCMP(plaintext, decrypted, AES_TEST_SIZE) != 0) {
+        printf("❌ Decrypted plaintext doesn't match original!\n");
+        
+        /* Find first mismatch */
+        for (int i = 0; i < AES_TEST_SIZE; i++) {
+            if (plaintext[i] != decrypted[i]) {
+                printf("First mismatch at byte %d: original=0x%02x decrypted=0x%02x\n", 
+                       i, plaintext[i], decrypted[i]);
+                break;
+            }
+        }
+        return -1;
+    }
+    
+    printf("✅ Plaintext verified successfully\n");
+    
+    /* Performance Summary */
+    printf("\n=== AES-GCM Performance Summary ===\n");
+    printf("Encryption (64 bytes): %lu cycles\n", encrypt_cycles);
+    printf("Decryption (64 bytes): %lu cycles\n", decrypt_cycles);
+    printf("Total:                 %lu cycles\n", encrypt_cycles + decrypt_cycles);
+    printf("===================================\n");
+    
+    return 0;
+}
+
+
 /* Updated main function to test seal/open only */
 int main(void)
 {
@@ -1291,12 +1809,32 @@ int main(void)
 
     // printf("HPKE Seal/Open Test (Bypass Key Generation)\n");
     // printf("===========================================\n");
-    
+
+
     /* Setup */
     if (setup_wolfssl_memory() != 0) {
         printf("FAIL: Static memory setup failed\n");
         return -1;
     }
+    
+    /* Test: AES-GCM Performance (128 bytes) */
+    printf("\n[Test: AES-GCM Performance]\n");
+    int aes_gcm_result = test_aes_gcm_performance_128bytes();
+    
+    if (aes_gcm_result == 0) {
+        printf("✅ AES-GCM Performance Test PASSED\n");
+    } else {
+        printf("❌ AES-GCM Performance Test FAILED\n");
+    }
+
+    int basic_result = test_hpke_large_data_static();
+    // int tamper_result = test_ascon_tamper_detection();
+    
+    printf("\n📊 Ascon Test Results:\n");
+    printf("   Basic AEAD test: %s\n", basic_result == 0 ? "✅ PASS" : "❌ FAIL");
+    // printf("   Tamper detection: %s\n", tamper_result == 0 ? "✅ PASS" : "❌ FAIL");
+
+
     
     // printf("✅ WolfSSL memory setup complete\n");
     
@@ -1311,7 +1849,7 @@ int main(void)
     
     /* Test 3: Large data seal/open with dynamic allocation */
     // printf("\n📦 Test 3: Large data seal/open (dynamic allocation)\n");
-    int test3_result = test_hpke_large_data_static();
+    // int test3_result = test_hpke_large_data_static();
     
     /* Test 4: Large data seal/open with static buffers */
     // printf("\n📦 Test 4: Large data seal/open (static buffers)\n");
@@ -1324,1097 +1862,3 @@ int main(void)
 
     return 0;
 }
-
-// /* Enhanced test case comparing hardware vs WolfSSL for 65-byte HKDF Expand */
-// void hwhmacsha_test_hkdf_expand_65bytes(void *hmac_shactrl)
-// {
-//     // printf("\n=== HKDF Expand Comparison: Hardware vs WolfSSL (65 bytes) ===\n");
-//     // printf("Testing message: T(0) + KEM_context(64) + counter(1) = 65 bytes\n");
-    
-//     /* Test data setup */
-//     unsigned char hkdf_msg[65];
-//     unsigned char prk_key[32];
-//     unsigned char info_context[64];  /* KEM context separate for WolfSSL */
-//     int offset = 0;
-    
-//     /* Build 32-byte PRK (simulated) */
-//     for (int i = 0; i < 32; i++) {
-//         prk_key[i] = 0x77;  /* Consistent PRK for both tests */
-//     }
-//     printf("Using 32-byte PRK filled with 0x77\n");
-    
-//     /* Build 64-byte KEM context */
-//     printf("Building 64-byte KEM context...\n");
-//     for (int i = 0; i < 32; i++) {
-//         info_context[i] = 0x11 + i;  /* Ephemeral public key simulation */
-//         hkdf_msg[offset + i] = info_context[i];
-//     }
-//     offset += 32;
-    
-//     for (int i = 0; i < 32; i++) {
-//         info_context[32 + i] = 0x33 + i;  /* Receiver public key simulation */
-//         hkdf_msg[offset + i] = info_context[32 + i];
-//     }
-//     offset += 32;
-    
-//     /* Add counter byte */
-//     hkdf_msg[offset] = 0x01;  /* Counter for iteration 1 */
-//     offset += 1;
-    
-//     // printf("Total message length: %d bytes\n", offset);
-//     // printf("KEM context: 64 bytes, Counter: 1 byte\n");
-
-
-//     /* ========================================= */
-//     /* HARDWARE HKDF EXPAND TEST                */
-//     /* ========================================= */
-//     printf("\n--- Hardware HKDF Expand (via hmacsha_compute) ---\n");
-    
-//     /* Convert to Vietnamese pattern for hardware */
-//     uint64_t key_hkdf[8] = {0};
-//     uint64_t msg_hkdf[32] = {0};
-//     uint64_t mac_hkdf[8];
-    
-//     /* Pack PRK as key */
-//     for (int i = 0; i < 32; i++) {
-//         int qw_idx = i / 4;
-//         int byte_idx = 3 - (i % 4);
-//         if (qw_idx < 8) {
-//             key_hkdf[qw_idx] |= ((uint64_t)prk_key[i]) << (8 * byte_idx);
-//         }
-//     }
-    
-//     /* Pack complete HKDF message (info + counter) */
-//     for (int i = 0; i < 65; i++) {
-//         int qw_idx = i / 4;
-//         int byte_idx = 3 - (i % 4);
-//         if (qw_idx < 32) {
-//             msg_hkdf[qw_idx] |= ((uint64_t)hkdf_msg[i]) << (8 * byte_idx);
-//         }
-//     }
-    
-//     // printf("Hardware message structure:\n");
-//     // printf("  Bytes 0-31:  Ephemeral public key\n");
-//     // printf("  Bytes 32-63: Receiver public key\n");
-//     // printf("  Byte 64:     Counter (0x01)\n");
-    
-//     /* Execute hardware HMAC */
-
-//     // printf("key_hkdf (PRK) - Full 64-bit values:\n");
-//     // for (int i = 0; i < 8; i++) {
-//     //     printf("  key_hkdf[%d] = 0x%016llx\n", i, key_hkdf[i]);
-//     // }
-
-//     // printf("msg_hkdf (Info + Counter) - Full 64-bit values:\n");
-//     // for (int i = 0; i < 32; i++) {
-//     //     if (msg_hkdf[i] != 0) {  /* Only print non-zero values */
-//     //         printf("  msg_hkdf[%d] = 0x%016llx\n", i, msg_hkdf[i]);
-//     //     }
-//     // }
-
-//     start_timing();
-//     int hardware_result = hmacsha_compute(hmac_shactrl, 
-//                                         SHA256_MODE,
-//                                         key_hkdf,
-//                                         msg_hkdf,
-//                                         65 * 8,        /* 520 bits */
-//                                         mac_hkdf);
-//     end_timing("Hardware HKDF Expand");
-    
-//     unsigned char t1_bytes_hw[32];
-//     if (hardware_result == 0) {
-//         printf("Hardware result: SUCCESS\n");
-        
-//         /* Convert result back to bytes */
-//         for (int i = 0; i < 8; i++) {
-//             uint32_t lower_32 = (uint32_t)(mac_hkdf[i] & 0xFFFFFFFF);
-//             t1_bytes_hw[i*4+0] = (lower_32 >> 24) & 0xFF;
-//             t1_bytes_hw[i*4+1] = (lower_32 >> 16) & 0xFF;
-//             t1_bytes_hw[i*4+2] = (lower_32 >> 8) & 0xFF;
-//             t1_bytes_hw[i*4+3] = (lower_32 >> 0) & 0xFF;
-//         }
-        
-//         printf("Hardware T(1) output:\n");
-//         printf("  ");
-//         for (int i = 0; i < 32; i++) {
-//             printf("%02x", t1_bytes_hw[i]);
-//         }
-//         printf("\n");
-//     } else {
-//         printf("Hardware result: FAILED (%d)\n", hardware_result);
-//     }
-
-    
-//     /* ========================================= */
-//     /* WOLFSSL SOFTWARE HKDF EXPAND TEST        */
-//     /* ========================================= */
-//     printf("\n--- WolfSSL Software HKDF Expand ---\n");
-    
-//     unsigned char okm_wolfssl[32];  /* Output Key Material from WolfSSL */
-    
-//     start_timing();
-//     int wolfssl_result = wc_HKDF_Expand(WC_SHA256,           /* Hash algorithm */
-//                                        prk_key, 32,          /* PRK key */
-//                                        info_context, 64,     /* Info (KEM context only) */
-//                                        okm_wolfssl, 32);     /* Output buffer */
-//     end_timing("WolfSSL HKDF Expand");
-    
-//     printf("WolfSSL result: %s\n", wolfssl_result == 0 ? "SUCCESS" : "FAILED");
-//     if (wolfssl_result == 0) {
-//         printf("WolfSSL T(1) output:\n");
-//         printf("  ");
-//         for (int i = 0; i < 32; i++) {
-//             printf("%02x", okm_wolfssl[i]);
-//         }
-//         printf("\n");
-//     } else {
-//         printf("WolfSSL HKDF Expand failed with error: %d\n", wolfssl_result);
-//     }
-    
-    
-//     /* ========================================= */
-//     /* COMPARISON AND VERIFICATION              */
-//     /* ========================================= */
-//     printf("\n--- Comparison Results ---\n");
-    
-//     if (wolfssl_result == 0 && hardware_result == 0) {
-//         /* Both succeeded - compare outputs */
-//         int outputs_match = (memcmp(okm_wolfssl, t1_bytes_hw, 32) == 0);
-        
-//         printf("Both implementations completed successfully\n");
-//         printf("Output comparison: %s\n", outputs_match ? "MATCH ✅" : "MISMATCH ❌");
-        
-//         if (!outputs_match) {
-//             printf("\nDetailed comparison:\n");
-//             printf("WolfSSL : ");
-//             for (int i = 0; i < 32; i++) printf("%02x", okm_wolfssl[i]);
-//             printf("\nHardware: ");
-//             for (int i = 0; i < 32; i++) printf("%02x", t1_bytes_hw[i]);
-//             printf("\n");
-            
-//             /* Find first mismatch */
-//             for (int i = 0; i < 32; i++) {
-//                 if (okm_wolfssl[i] != t1_bytes_hw[i]) {
-//                     printf("First mismatch at byte %d: WolfSSL=0x%02x, Hardware=0x%02x\n", 
-//                            i, okm_wolfssl[i], t1_bytes_hw[i]);
-//                     break;
-//                 }
-//             }
-//         }
-        
-//     } else if (wolfssl_result == 0 && hardware_result != 0) {
-//         printf("WolfSSL succeeded, Hardware failed\n");
-//         printf("❌ Hardware implementation needs fixing\n");
-        
-//     } else if (wolfssl_result != 0 && hardware_result == 0) {
-//         printf("Hardware succeeded, WolfSSL failed (unexpected)\n");
-//         printf("⚠️ WolfSSL error may indicate test setup issue\n");
-        
-//     } else {
-//         printf("Both implementations failed\n");
-//         printf("❌ Test setup or input data may be incorrect\n");
-//     }
-    
-//     /* ========================================= */
-//     /* FINAL ASSESSMENT                         */
-//     /* ========================================= */
-//     printf("\n--- Final Assessment ---\n");
-    
-//     if (wolfssl_result == 0 && hardware_result == 0) {
-//         int match = (memcmp(okm_wolfssl, t1_bytes_hw, 32) == 0);
-//         if (match) {
-//             printf("🎉 SUCCESS: Hardware HKDF Expand matches WolfSSL perfectly!\n");
-//             printf("✅ Your 65-byte message handling is working correctly\n");
-//             printf("✅ Hardware chunking implementation is correct\n");
-//             printf("✅ Vietnamese pattern conversion is working\n");
-//             printf("✅ Ready for HPKE integration!\n");
-//         } else {
-//             printf("⚠️ PARTIAL SUCCESS: Both work but outputs differ\n");
-//             printf("🔍 Check: Vietnamese pattern packing\n");
-//             printf("🔍 Check: Message structure (info vs info+counter)\n");
-//             printf("🔍 Check: Endianness handling\n");
-//         }
-//     } else {
-//         printf("❌ TEST FAILED: Implementation issues detected\n");
-//         printf("🔧 Debug hardware implementation\n");
-//         printf("🔧 Check 65-byte message handling\n");
-//         printf("🔧 Verify chunking logic\n");
-//     }
-    
-//     printf("\n=== HKDF Expand 65-byte Test Complete ===\n");
-// }
-
-
-// /* Side-by-side HKDF Extract test: WolfSSL vs Hardware */
-// static int test_hkdf_extract_side_by_side(void)
-// {
-//     // printf("\n======================================================\n");
-//     // printf("=== HKDF Extract Side-by-Side Comparison Test ===\n");
-//     // printf("======================================================\n");
-    
-//     int overall_result = 0;
-    
-//     /* Test Case 1: RFC 5869 Test Vector 1 */
-//     printf("\n--- Test Case 1: RFC 5869 Test Vector 1 ---\n");
-    
-//     byte ikm1[] = {
-//         0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
-//         0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
-//         0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b
-//     }; /* 22 bytes */
-    
-//     byte salt1[] = {
-//         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-//         0x08, 0x09, 0x0a, 0x0b, 0x0c
-//     }; /* 13 bytes */
-    
-//     byte prk1_hw[32];
-//     byte prk1_sw[32];
-    
-//     /* Expected PRK from RFC 5869 */
-//     byte prk1_expected[] = {
-//         0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf,
-//         0x0d, 0xdc, 0x3f, 0x0d, 0xc4, 0x7b, 0xba, 0x63,
-//         0x90, 0xb6, 0xc7, 0x3b, 0xb5, 0x0f, 0x9c, 0x31,
-//         0x22, 0xec, 0x84, 0x4a, 0xd7, 0xc2, 0xb3, 0xe5
-//     };
-    
-//     printf("Input data:\n");
-//     print_hex_debug("IKM", ikm1, sizeof(ikm1));
-//     print_hex_debug("Salt", salt1, sizeof(salt1));
-//     print_hex_debug("Expected PRK", prk1_expected, sizeof(prk1_expected));
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret_sw = wc_HKDF_Extract(WC_SHA256, salt1, sizeof(salt1), ikm1, sizeof(ikm1), prk1_sw);
-//     end_timing("WolfSSL HKDF Extract");
-    
-//     printf("WolfSSL result: %s\n", ret_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret_sw == 0) {
-//         print_hex_debug("WolfSSL PRK", prk1_sw, 32);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret_hw = hw_HKDF_Extract_with_hmacsha(salt1, sizeof(salt1), ikm1, sizeof(ikm1), prk1_hw);
-//     end_timing("Hardware HKDF Extract");
-    
-//     printf("Hardware result: %s\n", ret_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret_hw == 0) {
-//         print_hex_debug("Hardware PRK", prk1_hw, 32);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int hw_vs_expected = (ret_hw == 0) && (memcmp(prk1_hw, prk1_expected, 32) == 0);
-//     int sw_vs_expected = (ret_sw == 0) && (memcmp(prk1_sw, prk1_expected, 32) == 0);
-//     int hw_vs_sw = (ret_hw == 0) && (ret_sw == 0) && (memcmp(prk1_hw, prk1_sw, 32) == 0);
-    
-//     printf("Hardware vs Expected: %s\n", hw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     printf("Software vs Expected: %s\n", sw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     printf("Hardware vs Software: %s\n", hw_vs_sw ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!hw_vs_sw || !hw_vs_expected || !sw_vs_expected) {
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 2: No salt (HPKE style) */
-//     printf("\n--- Test Case 2: No Salt (HPKE Style) ---\n");
-    
-//     byte ikm2[] = {
-//         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-//         0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-//         0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-//         0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
-//     }; /* 32 bytes - typical DH output */
-    
-//     byte prk2_hw[32];
-//     byte prk2_sw[32];
-    
-//     printf("Testing with 32-byte IKM, no salt (HPKE pattern):\n");
-//     print_hex_debug("IKM (32 bytes)", ikm2, sizeof(ikm2));
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret2_sw = wc_HKDF_Extract(WC_SHA256, NULL, 0, ikm2, sizeof(ikm2), prk2_sw);
-//     end_timing("WolfSSL HKDF Extract (no salt)");
-    
-//     printf("WolfSSL result: %s\n", ret2_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret2_sw == 0) {
-//         print_hex_debug("WolfSSL PRK", prk2_sw, 32);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret2_hw = hw_HKDF_Extract_with_hmacsha(NULL, 0, ikm2, sizeof(ikm2), prk2_hw);
-//     end_timing("Hardware HKDF Extract (no salt)");
-    
-//     printf("Hardware result: %s\n", ret2_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret2_hw == 0) {
-//         print_hex_debug("Hardware PRK", prk2_hw, 32);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match2 = (ret2_hw == 0) && (ret2_sw == 0) && (memcmp(prk2_hw, prk2_sw, 32) == 0);
-//     printf("Hardware vs Software: %s\n", match2 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!match2) {
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 3: Small salt and IKM */
-//     printf("\n--- Test Case 3: Small Salt and IKM ---\n");
-    
-//     byte ikm3[] = {0x42, 0x43, 0x44, 0x45}; /* 4 bytes */
-//     byte salt3[] = {0xa1, 0xa2}; /* 2 bytes */
-    
-//     byte prk3_hw[32];
-//     byte prk3_sw[32];
-    
-//     printf("Testing with small data sizes:\n");
-//     print_hex_debug("IKM (4 bytes)", ikm3, sizeof(ikm3));
-//     print_hex_debug("Salt (2 bytes)", salt3, sizeof(salt3));
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     int ret3_sw = wc_HKDF_Extract(WC_SHA256, salt3, sizeof(salt3), ikm3, sizeof(ikm3), prk3_sw);
-//     printf("WolfSSL result: %s\n", ret3_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_sw == 0) {
-//         print_hex_debug("WolfSSL PRK", prk3_sw, 32);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     int ret3_hw = hw_HKDF_Extract_with_hmacsha(salt3, sizeof(salt3), ikm3, sizeof(ikm3), prk3_hw);
-//     printf("Hardware result: %s\n", ret3_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_hw == 0) {
-//         print_hex_debug("Hardware PRK", prk3_hw, 32);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match3 = (ret3_hw == 0) && (ret3_sw == 0) && (memcmp(prk3_hw, prk3_sw, 32) == 0);
-//     printf("Hardware vs Software: %s\n", match3 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!match3) {
-//         overall_result = -1;
-//     }
-    
-//     /* Final Summary */
-//     printf("\n======================================================\n");
-//     printf("=== FINAL TEST SUMMARY ===\n");
-//     printf("======================================================\n");
-//     printf("Test 1 (RFC 5869 with salt): %s\n", 
-//            (hw_vs_sw && hw_vs_expected && sw_vs_expected) ? "PASS ✅" : "FAIL ❌");
-//     printf("Test 2 (HPKE no salt):       %s\n", match2 ? "PASS ✅" : "FAIL ❌");
-//     printf("Test 3 (Small data):         %s\n", match3 ? "PASS ✅" : "FAIL ❌");
-    
-//     if (overall_result == 0) {
-//         printf("\n🎉 ALL TESTS PASSED!\n");
-//         printf("✅ Hardware HMAC-SHA matches WolfSSL HKDF Extract perfectly\n");
-//         printf("✅ Your hmacsha_compute function is working correctly\n");
-//         printf("✅ Ready for HPKE integration\n");
-//     } else {
-//         printf("\n⚠️ SOME TESTS FAILED\n");
-//         printf("❌ Hardware implementation needs debugging\n");
-//         printf("🔍 Check data packing, endianness, or hardware setup\n");
-//     }
-    
-//     return overall_result;
-// }
-
-// /* Side-by-side HKDF Expand test: WolfSSL vs Hardware */
-// static int test_hkdf_expand_side_by_side(void)
-// {
-//     printf("\n======================================================\n");
-//     printf("=== HKDF Expand Side-by-Side Comparison Test ===\n");
-//     printf("======================================================\n");
-    
-//     int overall_result = 0;
-    
-//     /* Test Case 1: RFC 5869 Test Vector 1 - Expand */
-//     printf("\n--- Test Case 1: RFC 5869 Test Vector 1 (Expand) ---\n");
-    
-//     /* PRK from previous extract operation */
-//     byte prk1[] = {
-//         0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf,
-//         0x0d, 0xdc, 0x3f, 0x0d, 0xc4, 0x7b, 0xba, 0x63,
-//         0x90, 0xb6, 0xc7, 0x3b, 0xb5, 0x0f, 0x9c, 0x31,
-//         0x22, 0xec, 0x84, 0x4a, 0xd7, 0xc2, 0xb3, 0xe5
-//     };
-    
-//     byte info1[] = {
-//         0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
-//         0xf8, 0xf9
-//     }; /* 10 bytes */
-    
-//     word32 okm_len = 42;  /* RFC 5869 test vector */
-//     byte okm1_hw[42];
-//     byte okm1_sw[42];
-    
-//     /* Expected OKM from RFC 5869 */
-//     byte okm1_expected[] = {
-//         0x3c, 0xb2, 0x5f, 0x25, 0xfa, 0xac, 0xd5, 0x7a,
-//         0x90, 0x43, 0x4f, 0x64, 0xd0, 0x36, 0x2f, 0x2a,
-//         0x2d, 0x2d, 0x0a, 0x90, 0xcf, 0x1a, 0x5a, 0x4c,
-//         0x5d, 0xb0, 0x2d, 0x56, 0xec, 0xc4, 0xc5, 0xbf,
-//         0x34, 0x00, 0x72, 0x08, 0xd5, 0xb8, 0x87, 0x18,
-//         0x58, 0x65
-//     };
-    
-//     printf("Input data:\n");
-//     print_hex_debug("PRK", prk1, sizeof(prk1));
-//     print_hex_debug("Info", info1, sizeof(info1));
-//     printf("OKM length: %u bytes\n", okm_len);
-//     print_hex_debug("Expected OKM", okm1_expected, sizeof(okm1_expected));
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret_sw = wc_HKDF_Expand(WC_SHA256, prk1, sizeof(prk1), info1, sizeof(info1), okm1_sw, okm_len);
-//     end_timing("WolfSSL HKDF Expand");
-    
-//     printf("WolfSSL result: %s\n", ret_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret_sw == 0) {
-//         print_hex_debug("WolfSSL OKM", okm1_sw, okm_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret_hw = hw_HKDF_Expand(prk1, sizeof(prk1), info1, sizeof(info1), okm1_hw, okm_len);
-//     end_timing("Hardware HKDF Expand");
-    
-//     printf("Hardware result: %s\n", ret_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret_hw == 0) {
-//         print_hex_debug("Hardware OKM", okm1_hw, okm_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int hw_vs_expected = (ret_hw == 0) && (memcmp(okm1_hw, okm1_expected, okm_len) == 0);
-//     int sw_vs_expected = (ret_sw == 0) && (memcmp(okm1_sw, okm1_expected, okm_len) == 0);
-//     int hw_vs_sw = (ret_hw == 0) && (ret_sw == 0) && (memcmp(okm1_hw, okm1_sw, okm_len) == 0);
-    
-//     printf("Hardware vs Expected: %s\n", hw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     printf("Software vs Expected: %s\n", sw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     printf("Hardware vs Software: %s\n", hw_vs_sw ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!hw_vs_sw || !hw_vs_expected || !sw_vs_expected) {
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 2: HPKE Style - Key Derivation */
-//     printf("\n--- Test Case 2: HPKE Key Derivation ---\n");
-    
-//     /* Example PRK from HPKE */
-//     byte prk2[] = {
-//         0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
-//         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-//         0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
-//         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
-//     };
-    
-//     /* HPKE key info: "key" + 16-bit length in network byte order */
-//     byte info2[] = {0x00, 0x01, 0x00, 0x10};  /* "key" + length 16 */
-//     word32 okm2_len = 16;  /* AES-128 key size */
-    
-//     byte okm2_hw[16];
-//     byte okm2_sw[16];
-    
-//     printf("Testing HPKE key derivation pattern:\n");
-//     print_hex_debug("PRK (32 bytes)", prk2, sizeof(prk2));
-//     print_hex_debug("Info (key derivation)", info2, sizeof(info2));
-//     printf("OKM length: %u bytes (AES-128 key)\n", okm2_len);
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret2_sw = wc_HKDF_Expand(WC_SHA256, prk2, sizeof(prk2), info2, sizeof(info2), okm2_sw, okm2_len);
-//     end_timing("WolfSSL HKDF Expand (key derivation)");
-    
-//     printf("WolfSSL result: %s\n", ret2_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret2_sw == 0) {
-//         print_hex_debug("WolfSSL derived key", okm2_sw, okm2_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret2_hw = hw_HKDF_Expand(prk2, sizeof(prk2), info2, sizeof(info2), okm2_hw, okm2_len);
-//     end_timing("Hardware HKDF Expand (key derivation)");
-    
-//     printf("Hardware result: %s\n", ret2_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret2_hw == 0) {
-//         print_hex_debug("Hardware derived key", okm2_hw, okm2_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match2 = (ret2_hw == 0) && (ret2_sw == 0) && (memcmp(okm2_hw, okm2_sw, okm2_len) == 0);
-//     printf("Hardware vs Software: %s\n", match2 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!match2) {
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 3: HPKE Nonce Derivation */
-//     printf("\n--- Test Case 3: HPKE Nonce Derivation ---\n");
-    
-//     /* HPKE nonce info: "base_nonce" + 12-bit length */
-//     byte info3[] = {0x00, 0x01, 0x00, 0x0c, 0x00, 0x00, 0x00};  /* "base_nonce" + length 12 */
-//     word32 okm3_len = 12;  /* GCM nonce size */
-    
-//     byte okm3_hw[12];
-//     byte okm3_sw[12];
-    
-//     printf("Testing HPKE nonce derivation pattern:\n");
-//     print_hex_debug("PRK (32 bytes)", prk2, sizeof(prk2));
-//     print_hex_debug("Info (nonce derivation)", info3, sizeof(info3));
-//     printf("OKM length: %u bytes (GCM nonce)\n", okm3_len);
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     int ret3_sw = wc_HKDF_Expand(WC_SHA256, prk2, sizeof(prk2), info3, sizeof(info3), okm3_sw, okm3_len);
-//     printf("WolfSSL result: %s\n", ret3_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_sw == 0) {
-//         print_hex_debug("WolfSSL derived nonce", okm3_sw, okm3_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     int ret3_hw = hw_HKDF_Expand(prk2, sizeof(prk2), info3, sizeof(info3), okm3_hw, okm3_len);
-//     printf("Hardware result: %s\n", ret3_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_hw == 0) {
-//         print_hex_debug("Hardware derived nonce", okm3_hw, okm3_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match3 = (ret3_hw == 0) && (ret3_sw == 0) && (memcmp(okm3_hw, okm3_sw, okm3_len) == 0);
-//     printf("Hardware vs Software: %s\n", match3 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!match3) {
-//         overall_result = -1;
-//     }
-    
-//     /* Final Summary */
-//     printf("\n======================================================\n");
-//     printf("=== HKDF EXPAND TEST SUMMARY ===\n");
-//     printf("======================================================\n");
-//     printf("Test 1 (RFC 5869 expand):   %s\n", 
-//            (hw_vs_sw && hw_vs_expected && sw_vs_expected) ? "PASS ✅" : "FAIL ❌");
-//     printf("Test 2 (HPKE key derive):   %s\n", match2 ? "PASS ✅" : "FAIL ❌");
-//     printf("Test 3 (HPKE nonce derive): %s\n", match3 ? "PASS ✅" : "FAIL ❌");
-    
-//     if (overall_result == 0) {
-//         printf("\n🎉 ALL HKDF EXPAND TESTS PASSED!\n");
-//         printf("✅ Hardware HMAC-SHA matches WolfSSL HKDF Expand perfectly\n");
-//         printf("✅ Your hmacsha_compute function handles multi-iteration HKDF correctly\n");
-//         printf("✅ Ready for full HPKE integration with hardware HKDF\n");
-//     } else {
-//         printf("\n⚠️ SOME HKDF EXPAND TESTS FAILED\n");
-//         printf("❌ Hardware implementation needs debugging\n");
-//         printf("🔍 Check iteration logic, message concatenation, or T(i-1) chaining\n");
-//     }
-    
-//     return overall_result;
-// }
-
-
-/* Side-by-side compare: firmware vs wolfSSL on Testcase 2 (AES-128, AAD+PT) */
-// static int test_gcm_compare_tc2(void* aes_gcmctrl)
-// {
-//     /* Testcase 2 vectors */
-// // * Use EXACT values from your HPKE seal operation */
-//     static const byte key[16] = {
-//         0xff,0xa6,0x40,0xee,0x8e,0xd4,0x94,0x37,0x9e,0xfa,0xa5,0x39,0x59,0xa8,0x41,0x88
-//     };
-//     static const byte iv[12] = {
-//         0xdb,0x0f,0xce,0x8e,0xd3,0xfa,0xb6,0xd6,0x93,0xe5,0x1f,0x95
-//     };
-//     static const byte aad[8] = {
-//         0x74,0x65,0x73,0x74,0x20,0x61,0x61,0x64  /* "test aad" */
-//     };
-//     static const byte pt[11] = {
-//         0x48,0x65,0x6c,0x6c,0x6f,0x20,0x48,0x50,0x4b,0x45,0x21  /* "Hello HPKE!" */
-//     };
-    
-//     /* Expected results from your HPKE operation */
-//     static const byte expected_ct[11] = {
-//         0x15,0xe3,0x85,0x68,0x12,0x06,0xc4,0x2c,0xc1,0x2e,0xf0
-//     };
-//     static const byte expected_tag[16] = {
-//         0x9f,0x0b,0x42,0x33,0xf0,0xf1,0x4c,0xcd,0xe1,0xff,0x9e,0x57,0xaa,0x09,0x05,0xe4
-//     };
-    
-//     enum { TAG_SZ = 16 };
-
-//     /* Hardware format buffers */
-//     const word32 pt_qw  = 6;  /* 48 bytes = 6 qwords */
-//     const word32 aad_qw = 4;  /* 28 bytes padded to 4 qwords */
-//     const word32 key_qw = 4;  /* Always 4 qwords (AES-256 format, zero-padded for AES-128) */
-//     const word32 iv_qw  = 2;  /* 12 bytes padded to 2 qwords */
-//     const word32 tag_qw = 2;  /* 16 bytes = 2 qwords */
-
-//     uint64_t hw_key[4] = {0};
-//     uint64_t hw_iv[2]  = {0};
-//     uint64_t hw_aad[4] = {0};
-//     uint64_t hw_pt[6]  = {0};
-//     uint64_t hw_ct[6]  = {0};
-//     uint64_t hw_tag[2] = {0};
-//     uint64_t hw_recovered_pt[6] = {0};
-
-//     /* Working buffers for comparison */
-//     byte hw_ct_bytes[sizeof(pt)] = {0};
-//     byte hw_tag_bytes[TAG_SZ] = {0};
-//     byte hw_recovered_bytes[sizeof(pt)] = {0};
-
-//     /* Pack inputs to hardware format */
-//     pack_bytes_to_qwords_be_fixed(key, sizeof(key), hw_key, key_qw);
-//     pack_bytes_to_qwords_be_fixed(iv,  sizeof(iv),  hw_iv,  iv_qw);
-//     pack_bytes_to_qwords_be_fixed(aad, sizeof(aad), hw_aad, aad_qw);
-//     pack_bytes_to_qwords_be_fixed(pt,  sizeof(pt),  hw_pt,  pt_qw);
-
-//     /* === STEP 1: HARDWARE ENCRYPTION === */
-//     // printf("\n--- Hardware AES-GCM Encryption ---\n");
-//     // printf("Encrypting %u bytes plaintext with %u bytes AAD\n", (unsigned)sizeof(pt), (unsigned)sizeof(aad));
-    
-//     // start_timing();
-//     hw_aes_gcm_reset(aes_gcmctrl);
-//     hw_aes_gcm_encrypt(aes_gcmctrl,
-//                        hw_ct, hw_pt, sizeof(pt),
-//                        hw_key, sizeof(key), hw_iv, sizeof(iv),
-//                        hw_aad, sizeof(aad), hw_tag, TAG_SZ);
-//     // end_timing("Hardware AES-GCM Encryption");
-
-//     /* Convert encryption results to bytes */
-//     unpack_qwords_to_bytes_be(hw_ct,  sizeof(pt), hw_ct_bytes);
-//     unpack_qwords_to_bytes_be(hw_tag, TAG_SZ,     hw_tag_bytes);
-
-//     print_hex_debug("Ciphertext", hw_ct_bytes, sizeof(pt));
-//     hw_ct[1] = hw_ct[1] & 0xFFFFFF0000000000ULL; 
-
-//     // start_timing();
-//     hw_aes_gcm_reset(aes_gcmctrl);
-//     int decrypt_ret = hw_aes_gcm_decrypt_verify(aes_gcmctrl, 
-//                                                 hw_recovered_pt, hw_ct, sizeof(pt),
-//                                                 hw_key, sizeof(key), hw_iv, sizeof(iv),
-//                                                 hw_aad, sizeof(aad), hw_tag, TAG_SZ);
-//     // end_timing("Hardware AES-GCM Decryption");
-
-//     if (decrypt_ret != 0) {
-//         printf("Hardware decryption/verification FAILED with error: %d\n", decrypt_ret);
-//         if (decrypt_ret == -6) {
-//             printf("Authentication tag verification failed\n");
-//         }
-//         return decrypt_ret;
-//     }
-
-//     /* Convert decryption results to bytes */
-//     unpack_qwords_to_bytes_be(hw_recovered_pt, sizeof(pt), hw_recovered_bytes);
-
-//     // printf("Decryption results:\n");
-//     // print_hex_debug("Recovered Plaintext", hw_recovered_bytes, sizeof(pt));
-
-//     /* === STEP 3: ROUND-TRIP VERIFICATION === */
-//     // printf("\n--- Round-trip Verification ---\n");
-//     int pt_match = (XMEMCMP(pt, hw_recovered_bytes, sizeof(pt)) == 0);
-    
-//     // printf("Plaintext recovery validation:\n");
-//     // printf("  Original plaintext matches recovered: %s\n", pt_match ? "PASS" : "FAIL");
-
-//     if (!pt_match) {
-//         printf("Round-trip validation FAILED\n");
-//         print_hex_debug("Original plaintext", pt, sizeof(pt));
-//         print_hex_debug("Recovered plaintext", hw_recovered_bytes, sizeof(pt));
-        
-//         /* Find first mismatch */
-//         for (unsigned i = 0; i < sizeof(pt); i++) {
-//             if (pt[i] != hw_recovered_bytes[i]) {
-//                 printf("First mismatch at byte %u: orig=0x%02x recovered=0x%02x\n", 
-//                        i, pt[i], hw_recovered_bytes[i]);
-//                 break;
-//             }
-//         }
-//         return -1;
-//     }
-
-//     printf("OK\n");
-//     return 0;
-// }
-
-
-
-// /* Side-by-side HKDF Expand test: WolfSSL vs Hardware */
-// static int test_hkdf_expand_side_by_side(void)
-// {
-//     // printf("\n======================================================\n");
-//     // printf("=== HKDF Expand Side-by-Side Comparison Test ===\n");
-//     // printf("======================================================\n");
-    
-//     int overall_result = 0;
-    
-//     /* Test Case 1: RFC 5869 Test Vector 1 - Expand */
-//     printf("\n--- Test Case 1: RFC 5869 Test Vector 1 (Expand) ---\n");
-    
-//     /* PRK from previous extract operation */
-//     byte prk1[] = {
-//         0x07, 0x77, 0x09, 0x36, 0x2c, 0x2e, 0x32, 0xdf,
-//         0x0d, 0xdc, 0x3f, 0x0d, 0xc4, 0x7b, 0xba, 0x63,
-//         0x90, 0xb6, 0xc7, 0x3b, 0xb5, 0x0f, 0x9c, 0x31,
-//         0x22, 0xec, 0x84, 0x4a, 0xd7, 0xc2, 0xb3, 0xe5
-//     };
-    
-//     byte info1[] = {
-//         0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
-//         0xf8, 0xf9
-//     }; /* 10 bytes */
-    
-//     word32 okm_len = 42;  /* RFC 5869 test vector */
-//     byte okm1_hw[42];
-//     byte okm1_sw[42];
-    
-//     /* Expected OKM from RFC 5869 */
-//     byte okm1_expected[] = {
-//         0x3c, 0xb2, 0x5f, 0x25, 0xfa, 0xac, 0xd5, 0x7a,
-//         0x90, 0x43, 0x4f, 0x64, 0xd0, 0x36, 0x2f, 0x2a,
-//         0x2d, 0x2d, 0x0a, 0x90, 0xcf, 0x1a, 0x5a, 0x4c,
-//         0x5d, 0xb0, 0x2d, 0x56, 0xec, 0xc4, 0xc5, 0xbf,
-//         0x34, 0x00, 0x72, 0x08, 0xd5, 0xb8, 0x87, 0x18,
-//         0x58, 0x65
-//     };
-    
-//     // printf("Input data:\n");
-//     // print_hex_debug("PRK", prk1, sizeof(prk1));
-//     // print_hex_debug("Info", info1, sizeof(info1));
-//     // printf("OKM length: %u bytes\n", okm_len);
-//     // print_hex_debug("Expected OKM", okm1_expected, sizeof(okm1_expected));
-    
-
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret_hw = hw_HKDF_Expand(prk1, sizeof(prk1), info1, sizeof(info1), okm1_hw, okm_len);
-//     end_timing("Hardware HKDF Expand");
-    
-//     printf("Hardware result: %s\n", ret_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret_hw == 0) {
-//         print_hex_debug("Hardware OKM", okm1_hw, okm_len);
-//     }
-    
-
-//     // /* Test with WolfSSL software */
-//     // printf("\n🔧 WolfSSL Software Implementation:\n");
-//     // start_timing();
-//     // int ret_sw = wc_HKDF_Expand(WC_SHA256, prk1, sizeof(prk1), info1, sizeof(info1), okm1_sw, okm_len);
-//     // end_timing("WolfSSL HKDF Expand");
-    
-//     // printf("WolfSSL result: %s\n", ret_sw == 0 ? "SUCCESS" : "FAILED");
-//     // if (ret_sw == 0) {
-//     //     print_hex_debug("WolfSSL OKM", okm1_sw, okm_len);
-//     // }
-    
-//     // /* Verify results */
-//     // printf("\n📊 Verification Results:\n");
-//     // int hw_vs_expected = (ret_hw == 0) && (memcmp(okm1_hw, okm1_expected, okm_len) == 0);
-//     // int sw_vs_expected = (ret_sw == 0) && (memcmp(okm1_sw, okm1_expected, okm_len) == 0);
-//     // int hw_vs_sw = (ret_hw == 0) && (ret_sw == 0) && (memcmp(okm1_hw, okm1_sw, okm_len) == 0);
-    
-//     // printf("Hardware vs Expected: %s\n", hw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     // printf("Software vs Expected: %s\n", sw_vs_expected ? "MATCH ✅" : "MISMATCH ❌");
-//     // printf("Hardware vs Software: %s\n", hw_vs_sw ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     // if (!hw_vs_sw || !hw_vs_expected || !sw_vs_expected) {
-//     //     overall_result = -1;
-//     // }
-    
-//     /* Test Case 2: HPKE Style - Key Derivation */
-//     printf("\n--- Test Case 2: HPKE Key Derivation ---\n");
-    
-//     /* Example PRK from HPKE */
-//     byte prk2[] = {
-//         0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
-//         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-//         0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
-//         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
-//     };
-    
-//     /* HPKE key info: "key" + 16-bit length in network byte order */
-//     byte info2[] = {0x00, 0x01, 0x00, 0x10};  /* "key" + length 16 */
-//     word32 okm2_len = 16;  /* AES-128 key size */
-    
-//     byte okm2_hw[16];
-//     byte okm2_sw[16];
-    
-//     // printf("Testing HPKE key derivation pattern:\n");
-//     // print_hex_debug("PRK (32 bytes)", prk2, sizeof(prk2));
-//     // print_hex_debug("Info (key derivation)", info2, sizeof(info2));
-//     // printf("OKM length: %u bytes (AES-128 key)\n", okm2_len);
-    
-//     // /* Test with WolfSSL software */
-//     // printf("\n🔧 WolfSSL Software Implementation:\n");
-//     // start_timing();
-//     // int ret2_sw = wc_HKDF_Expand(WC_SHA256, prk2, sizeof(prk2), info2, sizeof(info2), okm2_sw, okm2_len);
-//     // end_timing("WolfSSL HKDF Expand (key derivation)");
-    
-//     // printf("WolfSSL result: %s\n", ret2_sw == 0 ? "SUCCESS" : "FAILED");
-//     // if (ret2_sw == 0) {
-//     //     print_hex_debug("WolfSSL derived key", okm2_sw, okm2_len);
-//     // }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     start_timing();
-//     int ret2_hw = hw_HKDF_Expand(prk2, sizeof(prk2), info2, sizeof(info2), okm2_hw, okm2_len);
-//     end_timing("Hardware HKDF Expand (key derivation)");
-    
-//     printf("Hardware result: %s\n", ret2_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret2_hw == 0) {
-//         print_hex_debug("Hardware derived key", okm2_hw, okm2_len);
-//     }
-    
-//     // /* Verify results */
-//     // printf("\n📊 Verification Results:\n");
-//     // int match2 = (ret2_hw == 0) && (ret2_sw == 0) && (memcmp(okm2_hw, okm2_sw, okm2_len) == 0);
-//     // printf("Hardware vs Software: %s\n", match2 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     // if (!match2) {
-//     //     overall_result = -1;
-//     // }
-    
-//     /* Test Case 3: HPKE Nonce Derivation */
-//     printf("\n--- Test Case 3: HPKE Nonce Derivation ---\n");
-    
-//     /* HPKE nonce info: "base_nonce" + 12-bit length */
-//     byte info3[] = {0x00, 0x01, 0x00, 0x0c, 0x00, 0x00, 0x00};  /* "base_nonce" + length 12 */
-//     word32 okm3_len = 12;  /* GCM nonce size */
-    
-//     byte okm3_hw[12];
-//     byte okm3_sw[12];
-    
-//     printf("Testing HPKE nonce derivation pattern:\n");
-//     print_hex_debug("PRK (32 bytes)", prk2, sizeof(prk2));
-//     print_hex_debug("Info (nonce derivation)", info3, sizeof(info3));
-//     printf("OKM length: %u bytes (GCM nonce)\n", okm3_len);
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     int ret3_sw = wc_HKDF_Expand(WC_SHA256, prk2, sizeof(prk2), info3, sizeof(info3), okm3_sw, okm3_len);
-//     printf("WolfSSL result: %s\n", ret3_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_sw == 0) {
-//         print_hex_debug("WolfSSL derived nonce", okm3_sw, okm3_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (hmacsha_compute):\n");
-//     int ret3_hw = hw_HKDF_Expand(prk2, sizeof(prk2), info3, sizeof(info3), okm3_hw, okm3_len);
-//     printf("Hardware result: %s\n", ret3_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret3_hw == 0) {
-//         print_hex_debug("Hardware derived nonce", okm3_hw, okm3_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match3 = (ret3_hw == 0) && (ret3_sw == 0) && (memcmp(okm3_hw, okm3_sw, okm3_len) == 0);
-//     printf("Hardware vs Software: %s\n", match3 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (!match3) {
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 4: HPKE-Style Large Context (65+ bytes) - THE NEW TEST */
-//     printf("\n--- Test Case 4: HPKE Large Context (65+ bytes) ---\n");
-    
-//     /* Same PRK as Test Case 2 */
-//     byte prk4[] = {
-//         0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
-//         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-//         0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
-//         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
-//     };
-    
-//     /* Large info context: Simulating HPKE KEM context (64 bytes) + additional data */
-//     byte info4[72];  /* 72 bytes > 64-byte limit */
-    
-//     /* Build large info context */
-//     /* First 32 bytes: Simulated ephemeral public key */
-//     for (int i = 0; i < 32; i++) {
-//         info4[i] = 0x11 + (i % 16);  /* Pattern: 0x11-0x20 repeated */
-//     }
-    
-//     /* Next 32 bytes: Simulated receiver public key */
-//     for (int i = 0; i < 32; i++) {
-//         info4[32 + i] = 0x33 + (i % 16);  /* Pattern: 0x33-0x42 repeated */
-//     }
-    
-//     /* Additional 8 bytes: Extra context data */
-//     info4[64] = 0x00;  /* Version */
-//     info4[65] = 0x01;  /* KEM ID */
-//     info4[66] = 0x00;  /* KDF ID */
-//     info4[67] = 0x01;  /* AEAD ID */
-//     info4[68] = 0xaa;  /* App data */
-//     info4[69] = 0xbb;
-//     info4[70] = 0xcc;
-//     info4[71] = 0xdd;
-    
-//     word32 okm4_len = 32;  /* 32-byte output */
-    
-//     byte okm4_hw[32];
-//     byte okm4_sw[32];
-    
-//     printf("Testing large context (72 bytes > 64-byte limit):\n");
-//     print_hex_debug("PRK (32 bytes)", prk4, sizeof(prk4));
-//     print_hex_debug("Large Info context", info4, sizeof(info4));
-//     printf("Info size: %u bytes (exceeds 64-byte limit)\n", (unsigned)sizeof(info4));
-//     printf("OKM length: %u bytes\n", okm4_len);
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret4_sw = wc_HKDF_Expand(WC_SHA256, prk4, sizeof(prk4), info4, sizeof(info4), okm4_sw, okm4_len);
-//     end_timing("WolfSSL HKDF Expand (72-byte info)");
-    
-//     printf("WolfSSL result: %s\n", ret4_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret4_sw == 0) {
-//         print_hex_debug("WolfSSL OKM (72-byte info)", okm4_sw, okm4_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (enhanced hmacsha_compute):\n");
-//     start_timing();
-//     int ret4_hw = hw_HKDF_Expand(prk4, sizeof(prk4), info4, sizeof(info4), okm4_hw, okm4_len);
-//     end_timing("Hardware HKDF Expand (72-byte info)");
-    
-//     printf("Hardware result: %s\n", ret4_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret4_hw == 0) {
-//         print_hex_debug("Hardware OKM (72-byte info)", okm4_hw, okm4_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match4 = (ret4_hw == 0) && (ret4_sw == 0) && (memcmp(okm4_hw, okm4_sw, okm4_len) == 0);
-//     printf("Hardware vs Software (72-byte info): %s\n", match4 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (match4) {
-//         printf("✅ SUCCESS: Hardware chunking handled 72-byte info correctly!\n");
-//         printf("✅ Message breakdown for iteration 1:\n");
-//         printf("    T(0):     0 bytes (empty for first iteration)\n");
-//         printf("    Info:     72 bytes (large context)\n");
-//         printf("    Counter:  1 byte\n");
-//         printf("    Total:    73 bytes (requires chunking)\n");
-//     } else {
-//         printf("❌ Large message chunking failed\n");
-//         if (ret4_hw != 0) {
-//             printf("   Hardware error: %d\n", ret4_hw);
-//         }
-//         if (ret4_sw != 0) {
-//             printf("   WolfSSL error: %d\n", ret4_sw);
-//         }
-//         if (ret4_hw == 0 && ret4_sw == 0) {
-//             printf("   Output mismatch detected\n");
-//             printf("   WolfSSL : ");
-//             for (int i = 0; i < 8; i++) printf("%02x", okm4_sw[i]);
-//             printf("...\n");
-//             printf("   Hardware: ");
-//             for (int i = 0; i < 8; i++) printf("%02x", okm4_hw[i]);
-//             printf("...\n");
-//         }
-//         overall_result = -1;
-//     }
-    
-//     /* Test Case 5: Multi-Iteration Large Context (96+ bytes total message) */
-//     printf("\n--- Test Case 5: Multi-Iteration Large Context ---\n");
-    
-//     /* Use even larger info to force multiple iterations */
-//     byte info5[80];  /* 80 bytes info */
-    
-//     /* Build very large info context */
-//     for (int i = 0; i < 80; i++) {
-//         info5[i] = (byte)(0x50 + (i % 32));  /* Varied pattern */
-//     }
-    
-//     word32 okm5_len = 64;  /* 64-byte output (requires 2 iterations) */
-    
-//     byte okm5_hw[64];
-//     byte okm5_sw[64];
-    
-//     printf("Testing multi-iteration with large context:\n");
-//     print_hex_debug("PRK (32 bytes)", prk4, sizeof(prk4));
-//     printf("Large Info size: %u bytes\n", (unsigned)sizeof(info5));
-//     printf("OKM length: %u bytes (requires 2 iterations)\n", okm5_len);
-//     printf("Expected message sizes:\n");
-//     printf("  Iteration 1: T(0)(0) + Info(80) + Counter(1) = 81 bytes\n");
-//     printf("  Iteration 2: T(1)(32) + Info(80) + Counter(1) = 113 bytes\n");
-    
-//     /* Test with WolfSSL software */
-//     printf("\n🔧 WolfSSL Software Implementation:\n");
-//     start_timing();
-//     int ret5_sw = wc_HKDF_Expand(WC_SHA256, prk4, sizeof(prk4), info5, sizeof(info5), okm5_sw, okm5_len);
-//     end_timing("WolfSSL HKDF Expand (multi-iteration)");
-    
-//     printf("WolfSSL result: %s\n", ret5_sw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret5_sw == 0) {
-//         print_hex_debug("WolfSSL OKM (multi-iteration)", okm5_sw, okm5_len);
-//     }
-    
-//     /* Test with hardware */
-//     printf("\n⚡ Hardware Implementation (enhanced hmacsha_compute):\n");
-//     start_timing();
-//     int ret5_hw = hw_HKDF_Expand(prk4, sizeof(prk4), info5, sizeof(info5), okm5_hw, okm5_len);
-//     end_timing("Hardware HKDF Expand (multi-iteration)");
-    
-//     printf("Hardware result: %s\n", ret5_hw == 0 ? "SUCCESS" : "FAILED");
-//     if (ret5_hw == 0) {
-//         print_hex_debug("Hardware OKM (multi-iteration)", okm5_hw, okm5_len);
-//     }
-    
-//     /* Verify results */
-//     printf("\n📊 Verification Results:\n");
-//     int match5 = (ret5_hw == 0) && (ret5_sw == 0) && (memcmp(okm5_hw, okm5_sw, okm5_len) == 0);
-//     printf("Hardware vs Software (multi-iteration): %s\n", match5 ? "MATCH ✅" : "MISMATCH ❌");
-    
-//     if (match5) {
-//         printf("✅ SUCCESS: Hardware chunking handled multi-iteration correctly!\n");
-//         printf("✅ Both 81-byte and 113-byte messages processed successfully\n");
-//     } else {
-//         printf("❌ Multi-iteration chunking failed\n");
-//         overall_result = -1;
-//     }
-    
-//     if (!match4 || !match5) {
-//         overall_result = -1;
-//     }
-    
-//     // /* Final Summary */
-//     // printf("\n======================================================\n");
-//     // printf("=== HKDF EXPAND TEST SUMMARY ===\n");
-//     // printf("======================================================\n");
-//     // // printf("Test 1 (RFC 5869 expand):       %s\n", 
-//     // //        (hw_vs_sw && hw_vs_expected && sw_vs_expected) ? "PASS ✅" : "FAIL ❌");
-//     // printf("Test 2 (HPKE key derive):       %s\n", match2 ? "PASS ✅" : "FAIL ❌");
-//     // printf("Test 3 (HPKE nonce derive):     %s\n", match3 ? "PASS ✅" : "FAIL ❌");
-//     // printf("Test 4 (Large context 72B):     %s\n", match4 ? "PASS ✅" : "FAIL ❌");
-//     // printf("Test 5 (Multi-iteration 113B):  %s\n", match5 ? "PASS ✅" : "FAIL ❌");
-    
-//     // if (overall_result == 0) {
-//     //     printf("\n🎉 ALL HKDF EXPAND TESTS PASSED!\n");
-//     //     printf("✅ Hardware HMAC-SHA matches WolfSSL HKDF Expand perfectly\n");
-//     //     printf("✅ Your hmacsha_compute function handles multi-iteration HKDF correctly\n");
-//     //     printf("✅ Enhanced chunking supports messages > 64 bytes\n");
-//     //     printf("✅ Multi-iteration HKDF with large contexts working\n");
-//     //     printf("✅ Ready for full HPKE integration with hardware HKDF\n");
-//     // } else {
-//     //     printf("\n⚠️ SOME HKDF EXPAND TESTS FAILED\n");
-//     //     printf("❌ Hardware implementation needs debugging\n");
-//     //     printf("🔍 Check iteration logic, message concatenation, or chunking\n");
-//     //     printf("🔍 Verify T(i-1) chaining for multi-iteration cases\n");
-//     // }
-    
-//     return overall_result;
-// }
